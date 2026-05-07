@@ -1,6 +1,7 @@
-package handlers
+﻿package handlers
 
 import (
+	"fmt"
 	"log"
 	"strings"
 
@@ -9,7 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// ─── Webhook Payload ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Webhook Payload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type MessagePayload struct {
 	ChatID   string `json:"chat_id"`
@@ -39,7 +40,7 @@ type WebhookBody struct {
 	Body     string `json:"body"`
 }
 
-// ─── Main Webhook Handler ─────────────────────────────────────────────────────
+// â”€â”€â”€ Main Webhook Handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func HandleWebhook(c *fiber.Ctx) error {
 	var wb WebhookBody
@@ -89,24 +90,24 @@ func HandleWebhook(c *fiber.Ctx) error {
 
 	// Resolve device ID
 	deviceID := services.ResolveDeviceID(rawDeviceID)
-	log.Printf("🔌 Resolved Device ID: %s -> %s", rawDeviceID, deviceID)
+	log.Printf("ðŸ”Œ Resolved Device ID: %s -> %s", rawDeviceID, deviceID)
 
 	// Check if text message
 	body := payload.Message.Text
 	if body == "" {
-		log.Println("⚠️ Not a text message or missing message field")
+		log.Println("âš ï¸ Not a text message or missing message field")
 		return c.JSON(fiber.Map{"success": true, "message": "Non-text message ignored"})
 	}
 
 	// Check bot enabled
 	if !services.IsBotEnabled(deviceID) {
-		log.Printf("🤖 Bot dinonaktifkan untuk device: %s", deviceID)
+		log.Printf("ðŸ¤– Bot dinonaktifkan untuk device: %s", deviceID)
 		return c.JSON(fiber.Map{"success": true, "message": "Bot disabled"})
 	}
 
 	// Extract phone number
 	phoneNumber := extractPhone(payload.From)
-	log.Printf("📞 Extracted phone number: %s", phoneNumber)
+	log.Printf("ðŸ“ž Extracted phone number: %s", phoneNumber)
 
 	// Group detection
 	chatID := payload.ChatID
@@ -116,13 +117,13 @@ func HandleWebhook(c *fiber.Ctx) error {
 
 	session := services.GetSession(phoneNumber)
 
-	// Abaikan semua pesan dari group — bot hanya merespon pesan private
+	// Abaikan semua pesan dari group â€” bot hanya merespon pesan private
 	if isGroup {
-		log.Printf("⏭️ Ignoring group message from chat: %s", chatID)
+		log.Printf("â­ï¸ Ignoring group message from chat: %s", chatID)
 		return c.JSON(fiber.Map{"success": true, "message": "Group messages ignored"})
 	}
 
-	log.Printf("✅ Private message detected from %s", phoneNumber)
+	log.Printf("âœ… Private message detected from %s", phoneNumber)
 
 	// Clear registration session if active
 	if session != nil && session.Action == "register" {
@@ -132,13 +133,13 @@ func HandleWebhook(c *fiber.Ctx) error {
 	// Check if teacher
 	teacher, err := services.GetTeacherByPhone(phoneNumber, deviceID)
 	if err != nil {
-		log.Printf("❌ Error getting teacher: %v", err)
+		log.Printf("âŒ Error getting teacher: %v", err)
 	}
 
 	if teacher != nil {
-		log.Printf("👨‍🏫 Teacher found: %s", teacher.Nama)
+		log.Printf("ðŸ‘¨â€ðŸ« Teacher found: %s", teacher.Nama)
 		if !services.HasTeacherBotAccess(teacher.ID) {
-			log.Printf("🚫 Guru %s tidak memiliki akses bot", teacher.Nama)
+			log.Printf("ðŸš« Guru %s tidak memiliki akses bot", teacher.Nama)
 			if !isGroup {
 				services.SendMessage(phoneNumber, "Maaf, nomor Anda belum terdaftar di sistem kami. Silakan hubungi admin sekolah.", deviceID)
 			}
@@ -149,19 +150,20 @@ func HandleWebhook(c *fiber.Ctx) error {
 		return c.JSON(result)
 	}
 
-	// Non-teacher private
-	log.Printf("⏭️ Ignoring non-teacher private message from %s", phoneNumber)
-	services.SendMessage(phoneNumber, "Maaf, nomor Anda belum terdaftar di sistem kami. Silakan hubungi admin sekolah.", deviceID)
-	return c.JSON(fiber.Map{"success": true, "message": "Non-teacher message ignored"})
+	// Non-teacher private â€” cek apakah sedang dalam sesi registrasi
+	log.Printf("ðŸ“‹ Non-teacher message from %s, checking registration session", phoneNumber)
+	schoolName := services.GetSchoolName(deviceID)
+	result := handlePublicMessage(phoneNumber, body, deviceID, schoolName)
+	return c.JSON(result)
 }
 
-// ─── Teacher Message Handler ──────────────────────────────────────────────────
+// â”€â”€â”€ Teacher Message Handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func handleTeacherMessage(replyTo, body string, teacher *services.Guru, deviceID string) fiber.Map {
 	phoneNumber := teacher.NoWa
 	session := services.GetSession(phoneNumber)
 	cmd := services.ParseTeacherCommand(body)
-	log.Printf("⚡ Teacher command: %s, Search: %s, Option: %d", cmd.Command, cmd.SearchTerm, cmd.Option)
+	log.Printf("âš¡ Teacher command: %s, Search: %s, Option: %d", cmd.Command, cmd.SearchTerm, cmd.Option)
 
 	var responseMessage string
 
@@ -250,7 +252,7 @@ func handleTeacherMessage(replyTo, body string, teacher *services.Guru, deviceID
 		services.ClearSession(phoneNumber)
 
 	case cmd.Command == "confirm_no" && session != nil && session.Step == "confirm_delete":
-		responseMessage = "❌ *Penghapusan Dibatalkan*\n\nAbsensi tidak jadi dihapus.\n\nKetik `help` untuk melihat perintah lainnya."
+		responseMessage = "âŒ *Penghapusan Dibatalkan*\n\nAbsensi tidak jadi dihapus.\n\nKetik `help` untuk melihat perintah lainnya."
 		services.ClearSession(phoneNumber)
 
 	case cmd.Command == "confirm_yes" && session != nil && session.Step == "confirm_replace_create":
@@ -259,7 +261,7 @@ func handleTeacherMessage(replyTo, body string, teacher *services.Guru, deviceID
 		services.SetSession(phoneNumber, session)
 
 	case cmd.Command == "confirm_no" && session != nil && session.Step == "confirm_replace_create":
-		responseMessage = "❌ *Perubahan Dibatalkan*\n\nAbsensi tidak jadi diubah.\n\nKetik `help` untuk melihat perintah lainnya."
+		responseMessage = "âŒ *Perubahan Dibatalkan*\n\nAbsensi tidak jadi diubah.\n\nKetik `help` untuk melihat perintah lainnya."
 		services.ClearSession(phoneNumber)
 
 	case cmd.Command == "confirm_yes" && session != nil && session.Step == "confirm_replace_checkin":
@@ -268,7 +270,7 @@ func handleTeacherMessage(replyTo, body string, teacher *services.Guru, deviceID
 		services.ClearSession(phoneNumber)
 
 	case cmd.Command == "confirm_no" && session != nil && session.Step == "confirm_replace_checkin":
-		responseMessage = "❌ *Perubahan Dibatalkan*\n\nJam masuk tidak jadi diubah.\n\nKetik `help` untuk melihat perintah lainnya."
+		responseMessage = "âŒ *Perubahan Dibatalkan*\n\nJam masuk tidak jadi diubah.\n\nKetik `help` untuk melihat perintah lainnya."
 		services.ClearSession(phoneNumber)
 
 	case cmd.Command == "confirm_yes" && session != nil && session.Step == "confirm_replace_checkout":
@@ -281,13 +283,13 @@ func handleTeacherMessage(replyTo, body string, teacher *services.Guru, deviceID
 		services.ClearSession(phoneNumber)
 
 	case cmd.Command == "confirm_no" && session != nil && session.Step == "confirm_replace_checkout":
-		responseMessage = "❌ *Perubahan Dibatalkan*\n\nJam pulang tidak jadi diubah.\n\nKetik `help` untuk melihat perintah lainnya."
+		responseMessage = "âŒ *Perubahan Dibatalkan*\n\nJam pulang tidak jadi diubah.\n\nKetik `help` untuk melihat perintah lainnya."
 		services.ClearSession(phoneNumber)
 
 	case session != nil && session.Step == "input_keterangan" && session.Action == "create":
 		keterangan := strings.TrimSpace(body)
 		if keterangan == "" {
-			responseMessage = "❌ *Keterangan tidak boleh kosong*\n\nSilakan ketik keterangan untuk absensi ini."
+			responseMessage = "âŒ *Keterangan tidak boleh kosong*\n\nSilakan ketik keterangan untuk absensi ini."
 		} else {
 			services.CreateManualAttendance(session.SelectedStudent.ID, session.SelectedStatus, session.TeacherName, keterangan, deviceID, session.TeacherID)
 			responseMessage = services.GenerateAttendanceConfirmation(session.SelectedStudent.Nama, session.SelectedStudent.NamaKelas, session.SelectedStatus, keterangan)
@@ -297,7 +299,7 @@ func handleTeacherMessage(replyTo, body string, teacher *services.Guru, deviceID
 	case session != nil && session.Step == "edit_keterangan" && session.Action == "edit":
 		keterangan := strings.TrimSpace(body)
 		if keterangan == "" {
-			responseMessage = "❌ *Keterangan tidak boleh kosong*\n\nSilakan ketik keterangan baru."
+			responseMessage = "âŒ *Keterangan tidak boleh kosong*\n\nSilakan ketik keterangan baru."
 		} else {
 			services.UpdateAttendanceKeterangan(session.SelectedStudent.ID, keterangan, session.TeacherName, deviceID)
 			responseMessage = services.GenerateEditSuccessMessage(session.SelectedStudent.Nama, "keterangan", keterangan)
@@ -306,18 +308,18 @@ func handleTeacherMessage(replyTo, body string, teacher *services.Guru, deviceID
 
 	default:
 		if session != nil {
-			// Ada sesi aktif tapi input tidak dikenali → kirim alert sesuai step,
+			// Ada sesi aktif tapi input tidak dikenali â†’ kirim alert sesuai step,
 			// JANGAN hapus sesi agar guru bisa melanjutkan dari langkah yang sama.
 			responseMessage = services.GenerateSessionAlertMessage(session)
 		} else {
-			// Tidak ada sesi → tampilkan menu bantuan seperti biasa
+			// Tidak ada sesi â†’ tampilkan menu bantuan seperti biasa
 			schoolName := services.GetSchoolName(deviceID)
 			responseMessage = services.GenerateTeacherHelpMessage(teacher.Nama, schoolName)
 		}
 	}
 
 	sentResult := services.SendMessage(replyTo, responseMessage, deviceID)
-	log.Printf("📤 Sending response to teacher at %s", replyTo)
+	log.Printf("ðŸ“¤ Sending response to teacher at %s", replyTo)
 
 	if currentSession := services.GetSession(phoneNumber); currentSession != nil && sentResult.Success {
 		if data, ok := sentResult.Data["results"]; ok {
@@ -332,7 +334,7 @@ func handleTeacherMessage(replyTo, body string, teacher *services.Guru, deviceID
 	return fiber.Map{"success": true, "message": "Response sent", "user": teacher.Nama, "command": cmd.Command}
 }
 
-// ─── Select Option Handler ────────────────────────────────────────────────────
+// â”€â”€â”€ Select Option Handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func handleSelectOption(option int, session *services.Session, phoneNumber, deviceID string, teacher *services.Guru) string {
 	switch session.Step {
@@ -438,7 +440,7 @@ func handleSelectOption(option int, session *services.Session, phoneNumber, devi
 		case 2:
 			session.Step = "edit_keterangan"
 			services.SetSession(phoneNumber, session)
-			return "📝 *Edit Keterangan*\n\nSiswa: *" + session.SelectedStudent.Nama + "*\n\nSilakan ketik keterangan baru.\n\n💡 _Ketik keterangan baru_"
+			return "ðŸ“ *Edit Keterangan*\n\nSiswa: *" + session.SelectedStudent.Nama + "*\n\nSilakan ketik keterangan baru.\n\nðŸ’¡ _Ketik keterangan baru_"
 		default:
 			return services.GenerateInvalidSelectionMessage(2)
 		}
@@ -458,7 +460,7 @@ func handleSelectOption(option int, session *services.Session, phoneNumber, devi
 	return services.GenerateInvalidSelectionMessage(len(session.SearchResults))
 }
 
-// ─── Extract phone from 'from' field ─────────────────────────────────────────
+// â”€â”€â”€ Extract phone from 'from' field â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 func extractPhone(from string) string {
 	if strings.Contains(from, ":") {
@@ -468,4 +470,136 @@ func extractPhone(from string) string {
 		return strings.Split(from, "@")[0]
 	}
 	return from
+}
+
+// --- Public (Siswa/Ortu) Message Handler ---
+
+func handlePublicMessage(phoneNumber, body, deviceID, schoolName string) fiber.Map {
+	session := services.GetSession(phoneNumber)
+	cmd := services.ParsePublicCommand(body)
+	log.Printf("Public command: %s from %s", cmd.Command, phoneNumber)
+
+	var responseMessage string
+
+	switch {
+	// Mulai pendaftaran siswa
+	case cmd.Command == "register_student":
+		services.SetSession(phoneNumber, &services.Session{
+			Type:             "public",
+			Action:           "register",
+			Step:             "register_ask_nis",
+			RegistrationType: "siswa",
+		})
+		responseMessage = services.GenerateRegisterAskNISMessage("siswa")
+
+	// Mulai pendaftaran ortu
+	case cmd.Command == "register_parent":
+		services.SetSession(phoneNumber, &services.Session{
+			Type:             "public",
+			Action:           "register",
+			Step:             "register_ask_nis",
+			RegistrationType: "ortu",
+		})
+		responseMessage = services.GenerateRegisterAskNISMessage("ortu")
+
+	// Dalam sesi registrasi -- delegasikan ke state machine
+	case session != nil && session.Action == "register":
+		responseMessage = handleRegistrationMessage(phoneNumber, body, session, deviceID, schoolName)
+
+	// Tidak ada sesi -- tampilkan selamat datang
+	default:
+		responseMessage = services.GeneratePublicWelcomeMessage(schoolName)
+	}
+
+	services.SendMessage(phoneNumber, responseMessage, deviceID)
+	log.Printf("Registration response sent to %s", phoneNumber)
+	return fiber.Map{"success": true, "message": "Registration response sent", "command": cmd.Command}
+}
+
+func handleRegistrationMessage(phoneNumber, body string, session *services.Session, deviceID, schoolName string) string {
+	switch session.Step {
+
+	// Langkah 1: User kirim NIS
+	case "register_ask_nis":
+		nis := strings.TrimSpace(body)
+		if nis == "" {
+			return services.GenerateRegisterSessionAlert("register_ask_nis")
+		}
+		student, err := services.GetStudentByNIS(nis, deviceID)
+		if err != nil {
+			log.Printf("DB error on NIS lookup: %v", err)
+			return services.GenerateErrorMessage()
+		}
+		if student == nil {
+			return services.GenerateRegisterNISNotFoundMessage(nis, session.RegistrationType)
+		}
+		session.SelectedStudent = student
+		session.Step = "register_ask_tgl_lahir"
+		services.SetSession(phoneNumber, session)
+		return services.GenerateRegisterAskTglLahirMessage(student, session.RegistrationType)
+
+	// Langkah 2: User kirim tanggal lahir
+	case "register_ask_tgl_lahir":
+		input := strings.TrimSpace(body)
+		if !isValidDateInput(input) {
+			return services.GenerateRegisterSessionAlert("register_ask_tgl_lahir")
+		}
+		normalized := normalizeDateInput(input)
+		if session.SelectedStudent == nil {
+			services.ClearSession(phoneNumber)
+			return services.GenerateRegisterSessionAlert("")
+		}
+		dbDate := strings.TrimSpace(session.SelectedStudent.TglLahir)
+		if len(dbDate) > 10 {
+			dbDate = dbDate[:10]
+		}
+		if normalized != dbDate {
+			log.Printf("TglLahir mismatch for NIS %s: input=%s db=%s", session.SelectedStudent.NIS, normalized, dbDate)
+			services.ClearSession(phoneNumber)
+			return services.GenerateRegisterTglLahirWrongMessage(session.RegistrationType)
+		}
+		isOrtu := session.RegistrationType == "ortu"
+		err := services.UpdateStudentPhone(session.SelectedStudent.ID, services.NormalizePhone(phoneNumber), isOrtu)
+		if err != nil {
+			log.Printf("Error saving phone: %v", err)
+			services.ClearSession(phoneNumber)
+			return services.GenerateErrorMessage()
+		}
+		studentName := session.SelectedStudent.Nama
+		regType := session.RegistrationType
+		services.ClearSession(phoneNumber)
+		return services.GenerateRegisterSuccessMessage(studentName, regType, schoolName)
+	}
+
+	return services.GenerateRegisterSessionAlert(session.Step)
+}
+
+// isValidDateInput menerima format DD-MM-YYYY atau DD/MM/YYYY
+func isValidDateInput(s string) bool {
+	s = strings.ReplaceAll(s, "/", "-")
+	parts := strings.Split(s, "-")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, p := range parts {
+		for _, c := range p {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+	}
+	return len(parts[2]) == 4
+}
+
+// normalizeDateInput konversi DD-MM-YYYY atau DD/MM/YYYY ke YYYY-MM-DD
+func normalizeDateInput(s string) string {
+	s = strings.ReplaceAll(s, "/", "-")
+	parts := strings.Split(s, "-")
+	if len(parts) != 3 {
+		return s
+	}
+	dd := fmt.Sprintf("%02s", parts[0])
+	mm := fmt.Sprintf("%02s", parts[1])
+	yyyy := parts[2]
+	return yyyy + "-" + mm + "-" + dd
 }

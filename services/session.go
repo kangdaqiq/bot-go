@@ -11,17 +11,18 @@ import (
 
 // Session holds conversation state for a user
 type Session struct {
-	Type           string
-	Action         string
-	Step           string
-	SearchResults  []Siswa
-	TeacherID      uint
-	TeacherName    string
-	SelectedStudent *Siswa
-	SelectedStatus  string
-	ExistingAtt    *Attendance
-	BotMessageIDs  []BotMessage
-	Timestamp      time.Time
+	Type             string
+	Action           string
+	Step             string
+	SearchResults    []Siswa
+	TeacherID        uint
+	TeacherName      string
+	SelectedStudent  *Siswa
+	SelectedStatus   string
+	ExistingAtt      *Attendance
+	BotMessageIDs    []BotMessage
+	RegistrationType string // "siswa" or "ortu"
+	Timestamp        time.Time
 }
 
 type BotMessage struct {

@@ -135,6 +135,29 @@ func ParseTeacherCommand(msg string) ParsedCommand {
 	return ParsedCommand{Command: "unknown"}
 }
 
+// ParsePublicCommand parses perintah dari publik (siswa/ortu yang belum terdaftar)
+func ParsePublicCommand(msg string) ParsedCommand {
+	text := strings.ToLower(strings.TrimSpace(msg))
+
+	if text == "daftar siswa" {
+		return ParsedCommand{Command: "register_student"}
+	}
+	if text == "daftar ortu" || text == "daftar orang tua" || text == "daftar wali" {
+		return ParsedCommand{Command: "register_parent"}
+	}
+	if text == "ya" || text == "yes" || text == "iya" || text == "oke" || text == "ok" {
+		return ParsedCommand{Command: "confirm_yes"}
+	}
+	if text == "tidak" || text == "no" || text == "batal" || text == "cancel" || text == "nggak" || text == "enggak" {
+		return ParsedCommand{Command: "confirm_no"}
+	}
+	var n int
+	if _, err := fmt.Sscanf(text, "%d", &n); err == nil && fmt.Sprintf("%d", n) == text {
+		return ParsedCommand{Command: "select_option", Option: n}
+	}
+	return ParsedCommand{Command: "unknown"}
+}
+
 // ─── Message Generators ───────────────────────────────────────────────────────
 
 func GenerateTeacherHelpMessage(teacherName, schoolName string) string {
@@ -650,4 +673,102 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// ─── Registration Messages ────────────────────────────────────────────────────
+
+func GeneratePublicWelcomeMessage(schoolName string) string {
+	return fmt.Sprintf(`👋 *Selamat Datang di Bot Absensi %s* 🎓
+
+Halo! Nomor Anda belum terdaftar di sistem kami.
+
+Silakan daftar untuk mendapatkan notifikasi absensi:
+
+👨‍🎓 *Untuk Siswa:*
+   Ketik: `+"`"+`Daftar Siswa`+"`"+`
+
+👨‍👩‍👧 *Untuk Orang Tua/Wali:*
+   Ketik: `+"`"+`Daftar Ortu`+"`"+`
+
+💡 _Setelah terdaftar, Anda akan mendapat notifikasi absensi otomatis._`, schoolName)
+}
+
+func GenerateRegisterAskNISMessage(regType string) string {
+	if regType == "siswa" {
+		return "👨‍🎓 *Pendaftaran Nomor WA Siswa*\n\n🆔 Silakan ketik *NIS* Anda.\n\nContoh: `2024001`\n\n💡 _Ketik NIS Anda sekarang_"
+	}
+	return "👨‍👩‍👧 *Pendaftaran Nomor WA Orang Tua/Wali*\n\n🆔 Silakan ketik *NIS* anak Anda.\n\nContoh: `2024001`\n\n💡 _Ketik NIS anak Anda sekarang_"
+}
+
+func GenerateRegisterAskTglLahirMessage(student *Siswa, regType string) string {
+	who := "Anda"
+	if regType == "ortu" {
+		who = "anak Anda"
+	}
+	return fmt.Sprintf("✅ *Siswa Ditemukan*\n\n👤 Nama: *%s*\n📚 Kelas: %s\n🆔 NIS: %s\n\n🔐 Untuk verifikasi, masukkan *tanggal lahir %s*.\n\nFormat: `DD-MM-YYYY`\nContoh: `15-08-2007`\n\n💡 _Ketik tanggal lahir sekarang_",
+		student.Nama, orDash(student.NamaKelas), student.NIS, who)
+}
+
+func GenerateRegisterNISNotFoundMessage(nis, regType string) string {
+	cmd := "Daftar Siswa"
+	if regType == "ortu" {
+		cmd = "Daftar Ortu"
+	}
+	return fmt.Sprintf("❌ *NIS Tidak Ditemukan*\n\nNIS *%s* tidak terdaftar di sistem kami.\n\nSilakan periksa kembali NIS Anda dan coba lagi.\n\nKetik `%s` untuk memulai ulang.", nis, cmd)
+}
+
+func GenerateRegisterTglLahirWrongMessage(regType string) string {
+	cmd := "Daftar Siswa"
+	if regType == "ortu" {
+		cmd = "Daftar Ortu"
+	}
+	return fmt.Sprintf("❌ *Tanggal Lahir Tidak Sesuai*\n\nTanggal lahir yang Anda masukkan tidak cocok dengan data kami.\n\nSilakan periksa kembali, atau hubungi admin sekolah jika ada kesalahan data.\n\nKetik `%s` untuk mencoba kembali.", cmd)
+}
+
+
+
+func GenerateRegisterSuccessMessage(studentName, regType, schoolName string) string {
+	if regType == "siswa" {
+		return fmt.Sprintf(`🎉 *Pendaftaran Berhasil!*
+
+👤 Nama: *%s*
+🏫 Sekolah: %s
+
+Nomor WhatsApp Anda telah berhasil didaftarkan sebagai *nomor siswa*.
+
+Sekarang Anda akan mendapat notifikasi otomatis ketika:
+✅ Hadir / Jam masuk dicatat
+🏠 Jam pulang dicatat
+📊 Status absensi diperbarui
+
+_Terima kasih telah mendaftar!_ 🙏`, studentName, schoolName)
+	}
+	return fmt.Sprintf(`🎉 *Pendaftaran Berhasil!*
+
+👤 Siswa: *%s*
+🏫 Sekolah: %s
+
+Nomor WhatsApp Anda telah berhasil didaftarkan sebagai *nomor orang tua/wali*.
+
+Sekarang Anda akan mendapat notifikasi otomatis ketika:
+✅ Hadir / Jam masuk dicatat
+🏠 Jam pulang dicatat
+📊 Status absensi diperbarui
+
+_Terima kasih telah mendaftar!_ 🙏`, studentName, schoolName)
+}
+
+func GenerateRegisterCancelMessage() string {
+	return "❌ *Pendaftaran Dibatalkan*\n\nPendaftaran nomor WA dibatalkan.\n\nKetik `Daftar Siswa` atau `Daftar Ortu` jika ingin mendaftar kembali."
+}
+
+func GenerateRegisterSessionAlert(step string) string {
+	switch step {
+	case "register_ask_nis":
+		return "⚠️ *Input Tidak Valid*\n\nSilakan ketik *NIS* (Nomor Induk Siswa) yang valid.\n\nContoh: `2024001`"
+	case "register_ask_tgl_lahir":
+		return "⚠️ *Format Tidak Valid*\n\nSilakan masukkan tanggal lahir dengan format:\n`DD-MM-YYYY`\n\nContoh: `15-08-2007`"
+	default:
+		return "⚠️ *Input Tidak Dikenali*\n\nKetik `Daftar Siswa` atau `Daftar Ortu` untuk memulai pendaftaran."
+	}
 }

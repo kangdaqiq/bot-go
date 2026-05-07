@@ -131,6 +131,22 @@ func GetStudentByPhone(phone string, schoolID string) (*Siswa, error) {
 	return &siswa, nil
 }
 
+func GetStudentByNIS(nis, schoolID string) (*Siswa, error) {
+	var siswa Siswa
+	result := config.DB.Table("siswa s").
+		Select("s.*, k.nama_kelas").
+		Joins("LEFT JOIN kelas k ON s.kelas_id = k.id").
+		Where("s.nis = ? AND s.school_id = ?", nis, schoolID).
+		First(&siswa)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &siswa, nil
+}
+
 func IsBotEnabled(schoolID string) bool {
 	var result struct {
 		WaEnabled bool `gorm:"column:wa_enabled"`
@@ -237,6 +253,26 @@ func SearchStudentsByName(searchTerm, schoolID string) ([]Siswa, error) {
 		Limit(10).
 		Find(&students)
 	return students, result.Error
+}
+
+func SearchStudentsForRegistration(searchTerm, schoolID string) ([]Siswa, error) {
+	var students []Siswa
+	result := config.DB.Table("siswa s").
+		Select("s.*, k.nama_kelas").
+		Joins("LEFT JOIN kelas k ON s.kelas_id = k.id").
+		Where("(s.nama LIKE ? OR s.nis = ?) AND s.school_id = ?", "%"+searchTerm+"%", searchTerm, schoolID).
+		Order("s.nama").
+		Limit(10).
+		Find(&students)
+	return students, result.Error
+}
+
+func UpdateStudentPhone(studentID uint, phone string, isOrtu bool) error {
+	field := "no_wa"
+	if isOrtu {
+		field = "wa_ortu"
+	}
+	return config.DB.Table("siswa").Where("id = ?", studentID).Update(field, phone).Error
 }
 
 func SearchStudentsWithAttendanceToday(searchTerm, schoolID string) ([]Siswa, error) {
