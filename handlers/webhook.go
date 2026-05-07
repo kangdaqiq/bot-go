@@ -115,7 +115,6 @@ func HandleWebhook(c *fiber.Ctx) error {
 		strings.Contains(chatID, "@lid") ||
 		chatID != payload.SenderID
 
-	session := services.GetSession(phoneNumber)
 
 	// Abaikan semua pesan dari group â€” bot hanya merespon pesan private
 	if isGroup {
@@ -125,10 +124,6 @@ func HandleWebhook(c *fiber.Ctx) error {
 
 	log.Printf("âœ… Private message detected from %s", phoneNumber)
 
-	// Clear registration session if active
-	if session != nil && session.Action == "register" {
-		services.ClearSession(phoneNumber)
-	}
 
 	// Check if teacher
 	teacher, err := services.GetTeacherByPhone(phoneNumber, deviceID)
