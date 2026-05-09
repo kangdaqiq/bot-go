@@ -161,7 +161,7 @@ func ParsePublicCommand(msg string) ParsedCommand {
 // ─── Message Generators ───────────────────────────────────────────────────────
 
 func GenerateTeacherHelpMessage(teacherName, schoolName string) string {
-	return fmt.Sprintf(`👋 *Assalamualaikum, %s!*
+	return fmt.Sprintf(`👋 *Halo, %s!*
 
 Selamat datang di *Bot Absensi %s* 🎓
 
@@ -658,7 +658,7 @@ _Terima kasih atas perhatiannya._`,
 func GenerateCheckoutReminderMessage(teacherName string, students []map[string]string) string {
 	now := jakartaNow()
 	_ = now
-	msg := fmt.Sprintf("🔔 *Pengingat Absen Pulang*\n\nAssalamualaikum, %s!\n\nBerikut siswa yang sudah Anda absen masuk tapi belum absen pulang:\n\n", teacherName)
+	msg := fmt.Sprintf("🔔 *Pengingat Absen Pulang*\n\nHalo, %s!\n\nBerikut siswa yang sudah Anda absen masuk tapi belum absen pulang:\n\n", teacherName)
 	for i, s := range students {
 		msg += fmt.Sprintf("%d. *%s*\n   📚 Kelas: %s\n   ⏰ Masuk: %s\n\n", i+1, s["name"], orDash(s["class"]), formatTimeStr(s["jam_masuk"]))
 	}
