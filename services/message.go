@@ -215,7 +215,7 @@ Silakan coba dengan nama lain atau ketik `+"`"+`help`+"`"+` untuk bantuan.`, sea
 		if kelas == "" {
 			kelas = "-"
 		}
-		msg += fmt.Sprintf("%d. *%s*\n   📚 Kelas: %s\n   🆔 NIS: %s\n\n", i+1, s.Nama, kelas, s.NIS)
+		msg += fmt.Sprintf("%d. *%s*\n   📚 Kelas: %s\n   🆔 NISN: %s\n\n", i+1, s.Nama, kelas, s.NIS)
 	}
 	msg += fmt.Sprintf("\n💡 _Balas dengan nomor siswa yang ingin diabsen (1-%d)_", len(students))
 	return msg
@@ -460,7 +460,7 @@ func GenerateContactInfo(students []Siswa, searchTerm string) string {
 		if waOrtu == "" {
 			waOrtu = "-"
 		}
-		msg += fmt.Sprintf("%d. *%s*\n   🆔 NIS: %s\n   🏫 Kelas: %s\n   📱 Siswa: %s\n   👨‍👩‍👧 Ortu: %s\n", i+1, s.Nama, s.NIS, orDash(s.NamaKelas), noWa, waOrtu)
+		msg += fmt.Sprintf("%d. *%s*\n   🆔 NISN: %s\n   🏫 Kelas: %s\n   📱 Siswa: %s\n   👨‍👩‍👧 Ortu: %s\n", i+1, s.Nama, s.NIS, orDash(s.NamaKelas), noWa, waOrtu)
 		if s.NoWa != "" {
 			msg += fmt.Sprintf("   💬 Chat Siswa: https://wa.me/%s\n", s.NoWa)
 		}
@@ -695,9 +695,9 @@ Silakan daftar untuk mendapatkan notifikasi absensi:
 
 func GenerateRegisterAskNISMessage(regType string) string {
 	if regType == "siswa" {
-		return "👨‍🎓 *Pendaftaran Nomor WA Siswa*\n\n🆔 Silakan ketik *NIS* Anda.\n\nContoh: `2024001`\n\n💡 _Ketik NIS Anda sekarang_"
+		return "👨‍🎓 *Pendaftaran Nomor WA Siswa*\n\n🆔 Silakan ketik *NISN* Anda.\n\nContoh: `2024001`\n\n💡 _Ketik NISN Anda sekarang_"
 	}
-	return "👨‍👩‍👧 *Pendaftaran Nomor WA Orang Tua/Wali*\n\n🆔 Silakan ketik *NIS* anak Anda.\n\nContoh: `2024001`\n\n💡 _Ketik NIS anak Anda sekarang_"
+	return "👨‍👩‍👧 *Pendaftaran Nomor WA Orang Tua/Wali*\n\n🆔 Silakan ketik *NISN* anak Anda.\n\nContoh: `2024001`\n\n💡 _Ketik NISN anak Anda sekarang_"
 }
 
 func GenerateRegisterAskTglLahirMessage(student *Siswa, regType string) string {
@@ -705,7 +705,7 @@ func GenerateRegisterAskTglLahirMessage(student *Siswa, regType string) string {
 	if regType == "ortu" {
 		who = "anak Anda"
 	}
-	return fmt.Sprintf("✅ *Siswa Ditemukan*\n\n👤 Nama: *%s*\n📚 Kelas: %s\n🆔 NIS: %s\n\n🔐 Untuk verifikasi, masukkan *tanggal lahir %s*.\n\nFormat: `DD-MM-YYYY`\nContoh: `15-08-2007`\n\n💡 _Ketik tanggal lahir sekarang_",
+	return fmt.Sprintf("✅ *Siswa Ditemukan*\n\n👤 Nama: *%s*\n📚 Kelas: %s\n🆔 NISN: %s\n\n🔐 Untuk verifikasi, masukkan *tanggal lahir %s*.\n\nFormat: `DD-MM-YYYY`\nContoh: `15-08-2007`\n\n💡 _Ketik tanggal lahir sekarang_",
 		student.Nama, orDash(student.NamaKelas), student.NIS, who)
 }
 
@@ -714,7 +714,7 @@ func GenerateRegisterNISNotFoundMessage(nis, regType string) string {
 	if regType == "ortu" {
 		cmd = "Daftar Ortu"
 	}
-	return fmt.Sprintf("❌ *NIS Tidak Ditemukan*\n\nNIS *%s* tidak terdaftar di sistem kami.\n\nSilakan periksa kembali NIS Anda dan coba lagi.\n\nKetik `%s` untuk memulai ulang.", nis, cmd)
+	return fmt.Sprintf("❌ *NISN Tidak Ditemukan*\n\nNISN *%s* tidak terdaftar di sistem kami.\n\nSilakan periksa kembali NISN Anda dan coba lagi.\n\nKetik `%s` untuk memulai ulang.", nis, cmd)
 }
 
 func GenerateRegisterTglLahirWrongMessage(regType string) string {
@@ -724,8 +724,6 @@ func GenerateRegisterTglLahirWrongMessage(regType string) string {
 	}
 	return fmt.Sprintf("❌ *Tanggal Lahir Tidak Sesuai*\n\nTanggal lahir yang Anda masukkan tidak cocok dengan data kami.\n\nSilakan periksa kembali, atau hubungi admin sekolah jika ada kesalahan data.\n\nKetik `%s` untuk mencoba kembali.", cmd)
 }
-
-
 
 func GenerateRegisterSuccessMessage(studentName, regType, schoolName string) string {
 	if regType == "siswa" {
@@ -765,7 +763,7 @@ func GenerateRegisterCancelMessage() string {
 func GenerateRegisterSessionAlert(step string) string {
 	switch step {
 	case "register_ask_nis":
-		return "⚠️ *Input Tidak Valid*\n\nSilakan ketik *NIS* (Nomor Induk Siswa) yang valid.\n\nContoh: `2024001`"
+		return "⚠️ *Input Tidak Valid*\n\nSilakan ketik *NISN* (Nomor Induk Siswa) yang valid.\n\nContoh: `2024001`"
 	case "register_ask_tgl_lahir":
 		return "⚠️ *Format Tidak Valid*\n\nSilakan masukkan tanggal lahir dengan format:\n`DD-MM-YYYY`\n\nContoh: `15-08-2007`"
 	default:

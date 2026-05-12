@@ -115,7 +115,6 @@ func HandleWebhook(c *fiber.Ctx) error {
 		strings.Contains(chatID, "@lid") ||
 		chatID != payload.SenderID
 
-
 	// Abaikan semua pesan dari group â€” bot hanya merespon pesan private
 	if isGroup {
 		log.Printf("â­ï¸ Ignoring group message from chat: %s", chatID)
@@ -123,7 +122,6 @@ func HandleWebhook(c *fiber.Ctx) error {
 	}
 
 	log.Printf("âœ… Private message detected from %s", phoneNumber)
-
 
 	// Check if teacher
 	teacher, err := services.GetTeacherByPhone(phoneNumber, deviceID)
