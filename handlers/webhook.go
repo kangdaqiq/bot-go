@@ -92,10 +92,9 @@ func HandleWebhook(c *fiber.Ctx) error {
 	deviceID := services.ResolveDeviceID(rawDeviceID)
 	log.Printf("ðŸ”Œ Resolved Device ID: %s -> %s", rawDeviceID, deviceID)
 
-	// Check if message received by superadmin WA ID or device ID
-	devicePhone := services.GetDevicePhone(rawDeviceID)
-	if services.IsSuperadmin(devicePhone) || services.IsSuperadmin(rawDeviceID) || services.IsSuperadmin(deviceID) {
-		log.Printf("⚠️ Ignoring message received by superadmin: phone=%s, rawDeviceID=%s, deviceID=%s", devicePhone, rawDeviceID, deviceID)
+	// Check if message received by superadmin device ID
+	if rawDeviceID == "superadmin" || deviceID == "superadmin" {
+		log.Printf("⚠️ Ignoring message received by superadmin device")
 		return c.JSON(fiber.Map{"success": true, "message": "Superadmin messages ignored"})
 	}
 
