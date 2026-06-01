@@ -1,4 +1,4 @@
-﻿package handlers
+package handlers
 
 import (
 	"fmt"
@@ -91,6 +91,13 @@ func HandleWebhook(c *fiber.Ctx) error {
 	// Resolve device ID
 	deviceID := services.ResolveDeviceID(rawDeviceID)
 	log.Printf("ðŸ”Œ Resolved Device ID: %s -> %s", rawDeviceID, deviceID)
+
+	// Check if message received by superadmin WA ID or device ID
+	devicePhone := services.GetDevicePhone(rawDeviceID)
+	if services.IsSuperadmin(devicePhone) || services.IsSuperadmin(rawDeviceID) || services.IsSuperadmin(deviceID) {
+		log.Printf("⚠️ Ignoring message received by superadmin: phone=%s, rawDeviceID=%s, deviceID=%s", devicePhone, rawDeviceID, deviceID)
+		return c.JSON(fiber.Map{"success": true, "message": "Superadmin messages ignored"})
+	}
 
 	// Check if text message
 	body := payload.Message.Text
