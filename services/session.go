@@ -3,7 +3,6 @@ package services
 import (
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -32,10 +31,9 @@ type BotMessage struct {
 }
 
 var (
-	sessions       = make(map[string]*Session)
-	sessionsMu     sync.RWMutex
+	sessions      = make(map[string]*Session)
+	sessionsMu    sync.RWMutex
 	sessionTimeout = 2 * time.Minute
-	deviceJIDCache = make(map[string]string)
 )
 
 func SetSession(phone string, session *Session) {
@@ -206,9 +204,6 @@ func ResolveDeviceID(deviceID string) string {
 				parts := splitAt(d.JID)
 				if len(parts) == 2 {
 					deviceCache[parts[0]] = d.ID
-					deviceJIDCache[d.ID] = parts[0]
-				} else {
-					deviceJIDCache[d.ID] = d.JID
 				}
 			}
 			if d.ID != "" {
@@ -260,86 +255,4 @@ func splitAt(s string) []string {
 		}
 	}
 	return []string{s}
-}
-
-// GetDevicePhone returns the WhatsApp phone number (JID prefix) of a device ID
-func GetDevicePhone(deviceID string) string {
-	if containsAt(deviceID) {
-		if parts := splitAt(deviceID); len(parts) == 2 {
-			return parts[0]
-		}
-		return deviceID
-	}
-
-	// If it is just a plain phone number (all digits and length >= 7)
-	if isPlainPhone(deviceID) {
-		return deviceID
-	}
-
-	// It's a database ID or custom string ID (like "1", "superadmin")
-	deviceCacheMu.RLock()
-	cached, ok := deviceJIDCache[deviceID]
-	cacheValid := time.Since(lastCacheTime) < 60*time.Second
-	deviceCacheMu.RUnlock()
-
-	if cacheValid && ok {
-		return cached
-	}
-
-	// Stale or missing cache, refresh
-	ResolveDeviceID(deviceID)
-
-	deviceCacheMu.RLock()
-	cached, ok = deviceJIDCache[deviceID]
-	deviceCacheMu.RUnlock()
-
-	if ok {
-		return cached
-	}
-
-	return ""
-}
-
-func isPlainPhone(s string) bool {
-	if len(s) < 7 {
-		return false
-	}
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
-}
-
-// IsSuperadmin checks if the given phone or device ID matches the SUPERADMIN_WA_ID env var
-func IsSuperadmin(phoneOrID string) bool {
-	superadminStr := os.Getenv("SUPERADMIN_WA_ID")
-	if superadminStr == "" {
-		return false
-	}
-
-	normalizedInput := NormalizePhone(phoneOrID)
-	lowerInput := strings.ToLower(strings.TrimSpace(phoneOrID))
-
-	ids := strings.Split(superadminStr, ",")
-	for _, id := range ids {
-		trimmed := strings.TrimSpace(id)
-		if trimmed == "" {
-			continue
-		}
-
-		// Check numeric/phone format if it contains enough digits to be a phone
-		if normalizedInput != "62" && normalizedInput != "" {
-			if NormalizePhone(trimmed) == normalizedInput {
-				return true
-			}
-		}
-
-		// Direct case-insensitive string comparison for custom string IDs like "superadmin"
-		if strings.ToLower(trimmed) == lowerInput {
-			return true
-		}
-	}
-	return false
 }
