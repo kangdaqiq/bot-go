@@ -132,16 +132,13 @@ func HandleWebhook(c *fiber.Ctx) error {
 	// Check if teacher
 	teacher, err := services.GetTeacherByPhone(phoneNumber, deviceID)
 	if err != nil {
-		log.Printf("âŒ Error getting teacher: %v", err)
+		log.Printf("❌ Error getting teacher: %v", err)
 	}
 
 	if teacher != nil {
-		log.Printf("ðŸ‘¨â€ðŸ« Teacher found: %s", teacher.Nama)
+		log.Printf("👨‍🏫 Teacher found: %s", teacher.Nama)
 		if !services.HasTeacherBotAccess(teacher.ID) {
-			log.Printf("ðŸš« Guru %s tidak memiliki akses bot", teacher.Nama)
-			if !isGroup {
-				services.SendMessage(phoneNumber, "Maaf, nomor Anda belum terdaftar di sistem kami. Silakan hubungi admin sekolah.", deviceID)
-			}
+			log.Printf("🚫 Guru %s tidak memiliki akses bot", teacher.Nama)
 			return c.JSON(fiber.Map{"success": true, "message": "Teacher bot access denied"})
 		}
 
@@ -507,7 +504,9 @@ func handlePublicMessage(phoneNumber, body, deviceID, schoolName string) fiber.M
 
 	// Tidak ada sesi -- tampilkan selamat datang
 	default:
-		responseMessage = services.GeneratePublicWelcomeMessage(schoolName)
+		// Mengabaikan pesan dari nomor tidak dikenal agar bot tidak terdeteksi sebagai spam
+		log.Printf("Mengabaikan pesan dari %s agar tidak terdeteksi spam", phoneNumber)
+		return fiber.Map{"success": true, "message": "Ignored to prevent spam", "command": cmd.Command}
 	}
 
 	services.SendMessage(phoneNumber, responseMessage, deviceID)
