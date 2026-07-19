@@ -129,6 +129,9 @@ func HandleWebhook(c *fiber.Ctx) error {
 
 	log.Printf("âœ… Private message detected from %s", phoneNumber)
 
+	// Record last seen interaction
+	go services.UpdateLastSeen(phoneNumber)
+
 	// Check if teacher
 	teacher, err := services.GetTeacherByPhone(phoneNumber, deviceID)
 	if err != nil {

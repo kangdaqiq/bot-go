@@ -13,23 +13,26 @@ import (
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 type Siswa struct {
-	ID       uint   `gorm:"column:id"`
-	Nama     string `gorm:"column:nama"`
-	NIS      string `gorm:"column:nis"`
-	NoWa     string `gorm:"column:no_wa"`
-	WaOrtu   string `gorm:"column:wa_ortu"`
-	TglLahir string `gorm:"column:tgl_lahir"`
-	KelasID  uint   `gorm:"column:kelas_id"`
-	SchoolID uint   `gorm:"column:school_id"`
-	NamaKelas string `gorm:"column:nama_kelas"`
+	ID            uint       `gorm:"column:id"`
+	Nama          string     `gorm:"column:nama"`
+	NIS           string     `gorm:"column:nis"`
+	NoWa          string     `gorm:"column:no_wa"`
+	WaOrtu        string     `gorm:"column:wa_ortu"`
+	TglLahir      string     `gorm:"column:tgl_lahir"`
+	KelasID       uint       `gorm:"column:kelas_id"`
+	SchoolID      uint       `gorm:"column:school_id"`
+	NamaKelas     string     `gorm:"column:nama_kelas"`
+	LastSeenSiswa *time.Time `gorm:"column:last_seen_siswa"`
+	LastSeenOrtu  *time.Time `gorm:"column:last_seen_ortu"`
 }
 
 type Guru struct {
-	ID        uint   `gorm:"column:id"`
-	Nama      string `gorm:"column:nama"`
-	NoWa      string `gorm:"column:no_wa"`
-	SchoolID  uint   `gorm:"column:school_id"`
-	BotAccess bool   `gorm:"column:bot_access"`
+	ID        uint       `gorm:"column:id"`
+	Nama      string     `gorm:"column:nama"`
+	NoWa      string     `gorm:"column:no_wa"`
+	SchoolID  uint       `gorm:"column:school_id"`
+	BotAccess bool       `gorm:"column:bot_access"`
+	LastSeen  *time.Time `gorm:"column:last_seen"`
 }
 
 type Attendance struct {
@@ -517,5 +520,68 @@ func NotifyStudentAndParentEdit(studentID uint, status, keterangan, teacherName,
 	if s.WaOrtu != "" {
 		msg := GenerateParentEditNotification(s.Nama, s.NamaKelas, status, keterangan, teacherName)
 		SendMessage(s.WaOrtu, msg, schoolID)
+	}
+}
+
+// ─── Last Seen Migrator & Updates ─────────────────────────────────────────────
+
+func MigrateLastSeen() {
+	var count int64
+
+	// Check and add last_seen_siswa to siswa table
+	config.DB.Raw("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'siswa' AND COLUMN_NAME = 'last_seen_siswa'").Scan(&count)
+	if count == 0 {
+		fmt.Println("Migrating: Adding last_seen_siswa to siswa table")
+		if err := config.DB.Exec("ALTER TABLE `siswa` ADD COLUMN `last_seen_siswa` DATETIME NULL").Error; err != nil {
+			fmt.Printf("Warning: Failed to add last_seen_siswa: %v\n", err)
+		}
+	}
+
+	// Check and add last_seen_ortu to siswa table
+	config.DB.Raw("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'siswa' AND COLUMN_NAME = 'last_seen_ortu'").Scan(&count)
+	if count == 0 {
+		fmt.Println("Migrating: Adding last_seen_ortu to siswa table")
+		if err := config.DB.Exec("ALTER TABLE `siswa` ADD COLUMN `last_seen_ortu` DATETIME NULL").Error; err != nil {
+			fmt.Printf("Warning: Failed to add last_seen_ortu: %v\n", err)
+		}
+	}
+
+	// Check and add last_seen to guru table
+	config.DB.Raw("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'guru' AND COLUMN_NAME = 'last_seen'").Scan(&count)
+	if count == 0 {
+		fmt.Println("Migrating: Adding last_seen to guru table")
+		if err := config.DB.Exec("ALTER TABLE `guru` ADD COLUMN `last_seen` DATETIME NULL").Error; err != nil {
+			fmt.Printf("Warning: Failed to add last_seen to guru: %v\n", err)
+		}
+	}
+}
+
+func UpdateLastSeen(phone string) {
+	if phone == "" {
+		return
+	}
+	variants := phoneVariants(phone)
+	
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	var now time.Time
+	if err == nil {
+		now = time.Now().In(loc)
+	} else {
+		now = time.Now()
+	}
+
+	// Update siswa last_seen_siswa
+	if err := config.DB.Table("siswa").Where("no_wa IN ?", variants).Update("last_seen_siswa", now).Error; err != nil {
+		fmt.Printf("Error updating last_seen_siswa for phone %s: %v\n", phone, err)
+	}
+
+	// Update siswa last_seen_ortu
+	if err := config.DB.Table("siswa").Where("wa_ortu IN ?", variants).Update("last_seen_ortu", now).Error; err != nil {
+		fmt.Printf("Error updating last_seen_ortu for phone %s: %v\n", phone, err)
+	}
+
+	// Update guru last_seen
+	if err := config.DB.Table("guru").Where("no_wa IN ?", variants).Update("last_seen", now).Error; err != nil {
+		fmt.Printf("Error updating last_seen for guru phone %s: %v\n", phone, err)
 	}
 }

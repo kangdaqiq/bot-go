@@ -27,6 +27,9 @@ func main() {
 	// Initialize Database
 	config.ConnectDB()
 
+	// Run Database migrations for last seen columns
+	services.MigrateLastSeen()
+
 	// Initialize WhatsApp Client configuration
 	config.InitWhatsApp()
 
