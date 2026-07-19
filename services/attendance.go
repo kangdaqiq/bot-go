@@ -462,18 +462,34 @@ func getStudentWithClass(studentID uint) (*Siswa, error) {
 	return &s, nil
 }
 
+func IsWithinTwoDays(lastSeen *time.Time) bool {
+	if lastSeen == nil {
+		return false
+	}
+	limit := time.Now().Add(-48 * time.Hour)
+	return lastSeen.After(limit)
+}
+
 func NotifyStudentAndParentAttendance(studentID uint, status, keterangan, teacherName, schoolID string) {
 	s, err := getStudentWithClass(studentID)
 	if err != nil || s == nil {
 		return
 	}
 	if s.NoWa != "" {
-		msg := GenerateStudentAttendanceNotification(s.Nama, status, keterangan, teacherName)
-		SendMessage(s.NoWa, msg, schoolID)
+		if IsWithinTwoDays(s.LastSeenSiswa) {
+			msg := GenerateStudentAttendanceNotification(s.Nama, status, keterangan, teacherName)
+			SendMessage(s.NoWa, msg, schoolID)
+		} else {
+			fmt.Printf("⚠️ Skip student notification to %s: No interaction within 2 days\n", s.NoWa)
+		}
 	}
 	if s.WaOrtu != "" {
-		msg := GenerateParentAttendanceNotification(s.Nama, s.NamaKelas, status, keterangan, teacherName)
-		SendMessage(s.WaOrtu, msg, schoolID)
+		if IsWithinTwoDays(s.LastSeenOrtu) {
+			msg := GenerateParentAttendanceNotification(s.Nama, s.NamaKelas, status, keterangan, teacherName)
+			SendMessage(s.WaOrtu, msg, schoolID)
+		} else {
+			fmt.Printf("⚠️ Skip parent notification to %s: No interaction within 2 days\n", s.WaOrtu)
+		}
 	}
 }
 
@@ -483,12 +499,20 @@ func NotifyStudentAndParentCheckin(studentID uint, teacherName, schoolID string)
 		return
 	}
 	if s.NoWa != "" {
-		msg := GenerateStudentCheckinNotification(s.Nama, teacherName)
-		SendMessage(s.NoWa, msg, schoolID)
+		if IsWithinTwoDays(s.LastSeenSiswa) {
+			msg := GenerateStudentCheckinNotification(s.Nama, teacherName)
+			SendMessage(s.NoWa, msg, schoolID)
+		} else {
+			fmt.Printf("⚠️ Skip student checkin notification to %s: No interaction within 2 days\n", s.NoWa)
+		}
 	}
 	if s.WaOrtu != "" {
-		msg := GenerateParentCheckinNotification(s.Nama, s.NamaKelas, teacherName)
-		SendMessage(s.WaOrtu, msg, schoolID)
+		if IsWithinTwoDays(s.LastSeenOrtu) {
+			msg := GenerateParentCheckinNotification(s.Nama, s.NamaKelas, teacherName)
+			SendMessage(s.WaOrtu, msg, schoolID)
+		} else {
+			fmt.Printf("⚠️ Skip parent checkin notification to %s: No interaction within 2 days\n", s.WaOrtu)
+		}
 	}
 }
 
@@ -498,12 +522,20 @@ func NotifyStudentAndParentCheckout(studentID uint, jamMasuk, teacherName, schoo
 		return
 	}
 	if s.NoWa != "" {
-		msg := GenerateStudentCheckoutNotification(s.Nama, jamMasuk, teacherName)
-		SendMessage(s.NoWa, msg, schoolID)
+		if IsWithinTwoDays(s.LastSeenSiswa) {
+			msg := GenerateStudentCheckoutNotification(s.Nama, jamMasuk, teacherName)
+			SendMessage(s.NoWa, msg, schoolID)
+		} else {
+			fmt.Printf("⚠️ Skip student checkout notification to %s: No interaction within 2 days\n", s.NoWa)
+		}
 	}
 	if s.WaOrtu != "" {
-		msg := GenerateParentCheckoutNotification(s.Nama, s.NamaKelas, jamMasuk, teacherName)
-		SendMessage(s.WaOrtu, msg, schoolID)
+		if IsWithinTwoDays(s.LastSeenOrtu) {
+			msg := GenerateParentCheckoutNotification(s.Nama, s.NamaKelas, jamMasuk, teacherName)
+			SendMessage(s.WaOrtu, msg, schoolID)
+		} else {
+			fmt.Printf("⚠️ Skip parent checkout notification to %s: No interaction within 2 days\n", s.WaOrtu)
+		}
 	}
 }
 
@@ -514,12 +546,20 @@ func NotifyStudentAndParentEdit(studentID uint, status, keterangan, teacherName,
 	}
 	statusLabels := map[string]string{"H": "Hadir", "I": "Izin", "S": "Sakit", "A": "Alpha"}
 	if s.NoWa != "" {
-		msg := fmt.Sprintf("✏️ *Absensi Anda Diperbarui*\n\nStatus baru: *%s*\nOleh: %s", statusLabels[status], teacherName)
-		SendMessage(s.NoWa, msg, schoolID)
+		if IsWithinTwoDays(s.LastSeenSiswa) {
+			msg := fmt.Sprintf("✏️ *Absensi Anda Diperbarui*\n\nStatus baru: *%s*\nOleh: %s", statusLabels[status], teacherName)
+			SendMessage(s.NoWa, msg, schoolID)
+		} else {
+			fmt.Printf("⚠️ Skip student edit notification to %s: No interaction within 2 days\n", s.NoWa)
+		}
 	}
 	if s.WaOrtu != "" {
-		msg := GenerateParentEditNotification(s.Nama, s.NamaKelas, status, keterangan, teacherName)
-		SendMessage(s.WaOrtu, msg, schoolID)
+		if IsWithinTwoDays(s.LastSeenOrtu) {
+			msg := GenerateParentEditNotification(s.Nama, s.NamaKelas, status, keterangan, teacherName)
+			SendMessage(s.WaOrtu, msg, schoolID)
+		} else {
+			fmt.Printf("⚠️ Skip parent edit notification to %s: No interaction within 2 days\n", s.WaOrtu)
+		}
 	}
 }
 

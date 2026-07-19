@@ -12,11 +12,12 @@ import (
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 type TeacherReminder struct {
-	TeacherID    uint
-	TeacherName  string
-	TeacherPhone string
-	SchoolID     string
-	Students     []map[string]string
+	TeacherID       uint
+	TeacherName     string
+	TeacherPhone    string
+	SchoolID        string
+	Students        []map[string]string
+	TeacherLastSeen *time.Time
 }
 
 type Schedule struct {
@@ -41,18 +42,19 @@ func getStudentsNeedingCheckout(schoolID string) ([]TeacherReminder, error) {
 	todayStr := services.GetToday()
 
 	type Row struct {
-		TeacherID    uint   `gorm:"column:teacher_id"`
-		TeacherName  string `gorm:"column:teacher_name"`
-		TeacherPhone string `gorm:"column:teacher_phone"`
-		SchoolID     uint   `gorm:"column:school_id"`
-		StudentName  string `gorm:"column:student_name"`
-		ClassName    string `gorm:"column:class_name"`
-		JamMasuk     string `gorm:"column:jam_masuk"`
+		TeacherID       uint       `gorm:"column:teacher_id"`
+		TeacherName     string     `gorm:"column:teacher_name"`
+		TeacherPhone    string     `gorm:"column:teacher_phone"`
+		SchoolID        uint       `gorm:"column:school_id"`
+		StudentName     string     `gorm:"column:student_name"`
+		ClassName       string     `gorm:"column:class_name"`
+		JamMasuk        string     `gorm:"column:jam_masuk"`
+		TeacherLastSeen *time.Time `gorm:"column:teacher_last_seen"`
 	}
 
 	var rows []Row
 	config.DB.Table("attendance a").
-		Select("g.id as teacher_id, g.nama as teacher_name, g.no_wa as teacher_phone, g.school_id, s.nama as student_name, k.nama_kelas as class_name, a.jam_masuk").
+		Select("g.id as teacher_id, g.nama as teacher_name, g.no_wa as teacher_phone, g.school_id, g.last_seen as teacher_last_seen, s.nama as student_name, k.nama_kelas as class_name, a.jam_masuk").
 		Joins("INNER JOIN siswa s ON a.student_id = s.id").
 		Joins("INNER JOIN guru g ON a.checked_in_by_teacher_id = g.id").
 		Joins("LEFT JOIN kelas k ON s.kelas_id = k.id").
@@ -65,11 +67,12 @@ func getStudentsNeedingCheckout(schoolID string) ([]TeacherReminder, error) {
 		t, ok := teacherMap[r.TeacherID]
 		if !ok {
 			teacherMap[r.TeacherID] = &TeacherReminder{
-				TeacherID:    r.TeacherID,
-				TeacherName:  r.TeacherName,
-				TeacherPhone: r.TeacherPhone,
-				SchoolID:     fmt.Sprintf("%d", r.SchoolID),
-				Students:     []map[string]string{},
+				TeacherID:       r.TeacherID,
+				TeacherName:     r.TeacherName,
+				TeacherPhone:    r.TeacherPhone,
+				SchoolID:        fmt.Sprintf("%d", r.SchoolID),
+				Students:        []map[string]string{},
+				TeacherLastSeen: r.TeacherLastSeen,
 			}
 			t = teacherMap[r.TeacherID]
 		}
@@ -103,6 +106,13 @@ func sendCheckoutRemindersForSchool(schoolID string) {
 		if t.TeacherPhone == "" {
 			continue
 		}
+		
+		// Filter out based on last seen (2 days interaction limit)
+		if !services.IsWithinTwoDays(t.TeacherLastSeen) {
+			log.Printf("⚠️ Skip checkout reminder to teacher %s (%s): No interaction within 2 days", t.TeacherName, t.TeacherPhone)
+			continue
+		}
+
 		msg := services.GenerateCheckoutReminderMessage(t.TeacherName, t.Students)
 		services.SendMessage(t.TeacherPhone, msg, t.SchoolID)
 		log.Printf("✅ Reminder sent to %s (%d students, school %s)", t.TeacherName, len(t.Students), t.SchoolID)
