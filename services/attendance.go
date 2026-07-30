@@ -438,7 +438,7 @@ func QuickCheckout(studentID uint, teacherName, schoolID string) CheckoutResult 
 func SearchStudentContact(searchTerm, schoolID string) ([]Siswa, error) {
 	var students []Siswa
 	result := config.DB.Table("siswa s").
-		Select("s.id, s.nama, s.nis, s.no_wa, s.wa_ortu, k.nama_kelas").
+		Select("s.id, s.nama, s.nis, s.no_wa, s.wa_ortu, s.tgl_lahir, k.nama_kelas").
 		Joins("LEFT JOIN kelas k ON s.kelas_id = k.id").
 		Where("(s.nama LIKE ? OR s.nis LIKE ?) AND s.school_id = ?", "%"+searchTerm+"%", "%"+searchTerm+"%", schoolID).
 		Order("s.nama").

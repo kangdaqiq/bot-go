@@ -460,7 +460,7 @@ func GenerateContactInfo(students []Siswa, searchTerm string) string {
 		if waOrtu == "" {
 			waOrtu = "-"
 		}
-		msg += fmt.Sprintf("%d. *%s*\n   🆔 NISN: %s\n   🏫 Kelas: %s\n   📱 Siswa: %s\n   👨‍👩‍👧 Ortu: %s\n", i+1, s.Nama, s.NIS, orDash(s.NamaKelas), noWa, waOrtu)
+		msg += fmt.Sprintf("%d. *%s*\n   🆔 NISN: %s\n   🏫 Kelas: %s\n   🎂 TTL: %s\n   📱 Siswa: %s\n   👨‍👩‍👧 Ortu: %s\n", i+1, s.Nama, s.NIS, orDash(s.NamaKelas), orDash(s.TglLahir), noWa, waOrtu)
 		if s.NoWa != "" {
 			msg += fmt.Sprintf("   💬 Chat Siswa: https://wa.me/%s\n", s.NoWa)
 		}
