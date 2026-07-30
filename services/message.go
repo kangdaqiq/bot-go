@@ -446,6 +446,29 @@ func GenerateDeleteSuccessMessage(studentName string) string {
 	return fmt.Sprintf("✅ *Absensi Berhasil Dihapus*\n\n👤 Nama: *%s*\n\n_Absensi telah dihapus dari sistem._ ✨\n\nKetik `help` untuk melihat perintah lainnya.", studentName)
 }
 
+func formatTTL(dateStr string) string {
+	dateStr = strings.TrimSpace(dateStr)
+	if dateStr == "" {
+		return "-"
+	}
+
+	if idx := strings.IndexAny(dateStr, "T "); idx != -1 {
+		dateStr = dateStr[:idx]
+	}
+
+	parts := strings.Split(dateStr, "-")
+	if len(parts) == 3 {
+		if len(parts[0]) == 4 {
+			return fmt.Sprintf("%s-%s-%s", parts[2], parts[1], parts[0])
+		}
+		if len(parts[2]) == 4 {
+			return fmt.Sprintf("%s-%s-%s", parts[0], parts[1], parts[2])
+		}
+	}
+
+	return dateStr
+}
+
 func GenerateContactInfo(students []Siswa, searchTerm string) string {
 	if len(students) == 0 {
 		return fmt.Sprintf("❌ Siswa dengan nama \"%s\" tidak ditemukan.", searchTerm)
@@ -460,7 +483,7 @@ func GenerateContactInfo(students []Siswa, searchTerm string) string {
 		if waOrtu == "" {
 			waOrtu = "-"
 		}
-		msg += fmt.Sprintf("%d. *%s*\n   🆔 NISN: %s\n   🏫 Kelas: %s\n   🎂 TTL: %s\n   📱 Siswa: %s\n   👨‍👩‍👧 Ortu: %s\n", i+1, s.Nama, s.NIS, orDash(s.NamaKelas), orDash(s.TglLahir), noWa, waOrtu)
+		msg += fmt.Sprintf("%d. *%s*\n   🆔 NISN: %s\n   🏫 Kelas: %s\n   🎂 TTL: %s\n   📱 Siswa: %s\n   👨‍👩‍👧 Ortu: %s\n", i+1, s.Nama, s.NIS, orDash(s.NamaKelas), formatTTL(s.TglLahir), noWa, waOrtu)
 		if s.NoWa != "" {
 			msg += fmt.Sprintf("   💬 Chat Siswa: https://wa.me/%s\n", s.NoWa)
 		}
