@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 	"strings"
 
@@ -535,72 +534,39 @@ func handleRegistrationMessage(phoneNumber, body string, session *services.Sessi
 			return services.GenerateRegisterNISNotFoundMessage(nis, session.RegistrationType)
 		}
 		session.SelectedStudent = student
-		session.Step = "register_ask_tgl_lahir"
+		session.Step = "register_confirm_data"
 		services.SetSession(phoneNumber, session)
-		return services.GenerateRegisterAskTglLahirMessage(student, session.RegistrationType)
+		return services.GenerateRegisterConfirmDataMessage(student, session.RegistrationType)
 
-	// Langkah 2: User kirim tanggal lahir
-	case "register_ask_tgl_lahir":
-		input := strings.TrimSpace(body)
-		if !isValidDateInput(input) {
-			return services.GenerateRegisterSessionAlert("register_ask_tgl_lahir")
-		}
-		normalized := normalizeDateInput(input)
+	// Langkah 2: User konfirmasi data (Ya/Tidak)
+	case "register_confirm_data":
 		if session.SelectedStudent == nil {
 			services.ClearSession(phoneNumber)
 			return services.GenerateRegisterSessionAlert("")
 		}
-		dbDate := strings.TrimSpace(session.SelectedStudent.TglLahir)
-		if len(dbDate) > 10 {
-			dbDate = dbDate[:10]
-		}
-		if normalized != dbDate {
-			log.Printf("TglLahir mismatch for NIS %s: input=%s db=%s", session.SelectedStudent.NIS, normalized, dbDate)
+		input := strings.TrimSpace(strings.ToLower(body))
+		switch input {
+		case "ya", "y", "yes":
+			isOrtu := session.RegistrationType == "ortu"
+			err := services.UpdateStudentPhone(session.SelectedStudent.ID, services.NormalizePhone(phoneNumber), isOrtu)
+			if err != nil {
+				log.Printf("Error saving phone: %v", err)
+				services.ClearSession(phoneNumber)
+				return services.GenerateErrorMessage()
+			}
+			studentName := session.SelectedStudent.Nama
+			regType := session.RegistrationType
 			services.ClearSession(phoneNumber)
-			return services.GenerateRegisterTglLahirWrongMessage(session.RegistrationType)
-		}
-		isOrtu := session.RegistrationType == "ortu"
-		err := services.UpdateStudentPhone(session.SelectedStudent.ID, services.NormalizePhone(phoneNumber), isOrtu)
-		if err != nil {
-			log.Printf("Error saving phone: %v", err)
+			return services.GenerateRegisterSuccessMessage(studentName, regType, schoolName)
+
+		case "tidak", "t", "no", "batal", "cancel":
 			services.ClearSession(phoneNumber)
-			return services.GenerateErrorMessage()
+			return services.GenerateRegisterCancelMessage()
+
+		default:
+			return services.GenerateRegisterSessionAlert("register_confirm_data")
 		}
-		studentName := session.SelectedStudent.Nama
-		regType := session.RegistrationType
-		services.ClearSession(phoneNumber)
-		return services.GenerateRegisterSuccessMessage(studentName, regType, schoolName)
 	}
 
 	return services.GenerateRegisterSessionAlert(session.Step)
-}
-
-// isValidDateInput menerima format DD-MM-YYYY atau DD/MM/YYYY
-func isValidDateInput(s string) bool {
-	s = strings.ReplaceAll(s, "/", "-")
-	parts := strings.Split(s, "-")
-	if len(parts) != 3 {
-		return false
-	}
-	for _, p := range parts {
-		for _, c := range p {
-			if c < '0' || c > '9' {
-				return false
-			}
-		}
-	}
-	return len(parts[2]) == 4
-}
-
-// normalizeDateInput konversi DD-MM-YYYY atau DD/MM/YYYY ke YYYY-MM-DD
-func normalizeDateInput(s string) string {
-	s = strings.ReplaceAll(s, "/", "-")
-	parts := strings.Split(s, "-")
-	if len(parts) != 3 {
-		return s
-	}
-	dd := fmt.Sprintf("%02s", parts[0])
-	mm := fmt.Sprintf("%02s", parts[1])
-	yyyy := parts[2]
-	return yyyy + "-" + mm + "-" + dd
 }

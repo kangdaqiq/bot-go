@@ -723,12 +723,12 @@ func GenerateRegisterAskNISMessage(regType string) string {
 	return "👨‍👩‍👧 *Pendaftaran Nomor WA Orang Tua/Wali*\n\n🆔 Silakan ketik *NISN* anak Anda.\n\nContoh: `2024001`\n\n💡 _Ketik NISN anak Anda sekarang_"
 }
 
-func GenerateRegisterAskTglLahirMessage(student *Siswa, regType string) string {
+func GenerateRegisterConfirmDataMessage(student *Siswa, regType string) string {
 	who := "Anda"
 	if regType == "ortu" {
 		who = "anak Anda"
 	}
-	return fmt.Sprintf("✅ *Siswa Ditemukan*\n\n👤 Nama: *%s*\n📚 Kelas: %s\n🆔 NISN: %s\n\n🔐 Untuk verifikasi, masukkan *tanggal lahir %s*.\n\nFormat: `DD-MM-YYYY`\nContoh: `15-08-2007`\n\n💡 _Ketik tanggal lahir sekarang_",
+	return fmt.Sprintf("✅ *Data Siswa Ditemukan*\n\n👤 Nama: *%s*\n📚 Kelas: %s\n🆔 NISN: %s\n\nApakah data %s di atas sudah benar?\n\nKetik *Ya* untuk mengonfirmasi pendaftaran.\nKetik *Tidak* untuk membatalkan.",
 		student.Nama, orDash(student.NamaKelas), student.NIS, who)
 }
 
@@ -738,14 +738,6 @@ func GenerateRegisterNISNotFoundMessage(nis, regType string) string {
 		cmd = "Daftar Ortu"
 	}
 	return fmt.Sprintf("❌ *NISN Tidak Ditemukan*\n\nNISN *%s* tidak terdaftar di sistem kami.\n\nSilakan periksa kembali NISN Anda dan coba lagi.\n\nKetik `%s` untuk memulai ulang.", nis, cmd)
-}
-
-func GenerateRegisterTglLahirWrongMessage(regType string) string {
-	cmd := "Daftar Siswa"
-	if regType == "ortu" {
-		cmd = "Daftar Ortu"
-	}
-	return fmt.Sprintf("❌ *Tanggal Lahir Tidak Sesuai*\n\nTanggal lahir yang Anda masukkan tidak cocok dengan data kami.\n\nSilakan periksa kembali, atau hubungi admin sekolah jika ada kesalahan data.\n\nKetik `%s` untuk mencoba kembali.", cmd)
 }
 
 func GenerateRegisterSuccessMessage(studentName, regType, schoolName string) string {
@@ -787,8 +779,8 @@ func GenerateRegisterSessionAlert(step string) string {
 	switch step {
 	case "register_ask_nis":
 		return "⚠️ *Input Tidak Valid*\n\nSilakan ketik *NISN* (Nomor Induk Siswa) yang valid.\n\nContoh: `2024001`"
-	case "register_ask_tgl_lahir":
-		return "⚠️ *Format Tidak Valid*\n\nSilakan masukkan tanggal lahir dengan format:\n`DD-MM-YYYY`\n\nContoh: `15-08-2007`"
+	case "register_confirm_data":
+		return "⚠️ *Konfirmasi Dibutuhkan*\n\nSilakan ketik *Ya* jika data sudah benar, atau *Tidak* untuk membatalkan."
 	default:
 		return "⚠️ *Input Tidak Dikenali*\n\nKetik `Daftar Siswa` atau `Daftar Ortu` untuk memulai pendaftaran."
 	}
