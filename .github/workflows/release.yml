@@ -1,0 +1,90 @@
+name: Release Compiled Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Release Binaries (.zip)
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          # Linux builds
+          - os: linux
+            arch: amd64
+            artifact_name: bot-linux-amd64
+            binary_name: bot_wa
+          - os: linux
+            arch: arm64
+            artifact_name: bot-linux-arm64
+            binary_name: bot_wa
+          - os: linux
+            arch: '386'
+            artifact_name: bot-linux-x86_32
+            binary_name: bot_wa
+          # Windows builds
+          - os: windows
+            arch: amd64
+            artifact_name: bot-windows-amd64
+            binary_name: bot_wa.exe
+          - os: windows
+            arch: arm64
+            artifact_name: bot-windows-arm64
+            binary_name: bot_wa.exe
+          - os: windows
+            arch: '386'
+            artifact_name: bot-windows-x86_32
+            binary_name: bot_wa.exe
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          check-latest: true
+
+      - name: Install Zip Utility
+        run: sudo apt-get update && sudo apt-get install -y zip
+
+      - name: Build Binary
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p output/${{ matrix.artifact_name }}
+          go build -ldflags="-s -w" -o output/${{ matrix.artifact_name }}/${{ matrix.binary_name }} main.go
+
+      - name: Copy Supporting Files & Package Zip
+        run: |
+          cp .env.example output/${{ matrix.artifact_name }}/
+          [ -f README.md ] && cp README.md output/${{ matrix.artifact_name }}/
+          [ -f DEPLOYMENT_UBUNTU.md ] && cp DEPLOYMENT_UBUNTU.md output/${{ matrix.artifact_name }}/
+          cd output
+          zip -r ../${{ matrix.artifact_name }}.zip ${{ matrix.artifact_name }}
+
+      - name: Upload Artifact (Action Run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}.zip
+
+      - name: Upload Build Artifact to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{ matrix.artifact_name }}.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
