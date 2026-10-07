@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"bot_wa/config"
 
@@ -91,12 +92,12 @@ func phoneVariants(phone string) []string {
 }
 
 func today() string {
-	loc, _ := time.LoadLocation("Asia/Jakarta")
+	loc := GetJakartaLocation()
 	return time.Now().In(loc).Format("2006-01-02")
 }
 
 func nowTime() string {
-	loc, _ := time.LoadLocation("Asia/Jakarta")
+	loc := GetJakartaLocation()
 	return time.Now().In(loc).Format("15:04:05")
 }
 
@@ -199,7 +200,7 @@ func GetTodayAttendance(studentID uint) (*Attendance, error) {
 }
 
 func GetAttendanceRecap(studentID uint, period string) (*AttendanceStats, error) {
-	loc, _ := time.LoadLocation("Asia/Jakarta")
+	loc := GetJakartaLocation()
 	now := time.Now().In(loc)
 
 	var startDate, endDate string
@@ -602,13 +603,8 @@ func UpdateLastSeen(phone string) {
 	}
 	variants := phoneVariants(phone)
 	
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	var now time.Time
-	if err == nil {
-		now = time.Now().In(loc)
-	} else {
-		now = time.Now()
-	}
+	loc := GetJakartaLocation()
+	now := time.Now().In(loc)
 
 	// Update siswa last_seen_siswa
 	if err := config.DB.Table("siswa").Where("no_wa IN ?", variants).Update("last_seen_siswa", now).Error; err != nil {

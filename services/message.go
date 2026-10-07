@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	_ "time/tzdata"
 )
 
 // Jakarta timezone helper
 func jakartaNow() time.Time {
-	loc, _ := time.LoadLocation("Asia/Jakarta")
+	loc := GetJakartaLocation()
 	return time.Now().In(loc)
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"time"
+	_ "time/tzdata"
 
 	"bot_wa/config"
 	"bot_wa/services"
@@ -126,7 +127,7 @@ func sendCheckoutRemindersForSchool(schoolID string) {
 // Tiap sekolah punya jadwal pulang sendiri — reminder dikirim per sekolah
 // sesuai jam pulang masing-masing.
 func StartReminderScheduler() {
-	loc, _ := time.LoadLocation("Asia/Jakarta")
+	loc := services.GetJakartaLocation()
 	log.Println("📅 Checkout reminder scheduler started")
 
 	go func() {
@@ -148,6 +149,9 @@ func StartReminderScheduler() {
 // runDailySchedules memonitor waktu selama satu hari.
 // Saat jam pulang suatu sekolah tiba, reminder dikirim hanya ke guru sekolah tersebut.
 func runDailySchedules(schedules []Schedule, loc *time.Location) {
+	if loc == nil {
+		loc = services.GetJakartaLocation()
+	}
 	now := time.Now().In(loc)
 	endOfDay := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, loc)
 
