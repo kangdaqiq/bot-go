@@ -64,14 +64,20 @@ func TestGenerateAttendanceConfirmationWithJamPulang(t *testing.T) {
 	}
 }
 
-func TestGenerateNotificationsWithJamPulang(t *testing.T) {
-	studentMsg := GenerateStudentAttendanceNotification("Budi Santoso", "H", "Hadir", "Pak Guru", "12:00:00")
-	if !strings.Contains(studentMsg, "Jam Masuk:") || !strings.Contains(studentMsg, "Jam Pulang: 12:00") {
-		t.Errorf("Student notification missing Jam Masuk or Jam Pulang: %s", studentMsg)
+func TestGenerateNotificationsWithJamMasukOnly(t *testing.T) {
+	studentMsg := GenerateStudentAttendanceNotification("Budi Santoso", "H", "Hadir", "Pak Guru")
+	if !strings.Contains(studentMsg, "Jam Masuk:") {
+		t.Errorf("Student notification missing Jam Masuk: %s", studentMsg)
+	}
+	if strings.Contains(studentMsg, "Jam Pulang:") {
+		t.Errorf("Student notification should NOT have Jam Pulang: %s", studentMsg)
 	}
 
-	parentMsg := GenerateParentAttendanceNotification("Budi Santoso", "X IPA 1", "H", "Hadir", "Pak Guru", "12:00:00")
-	if !strings.Contains(parentMsg, "Jam Masuk:") || !strings.Contains(parentMsg, "Jam Pulang: 12:00") {
-		t.Errorf("Parent notification missing Jam Masuk or Jam Pulang: %s", parentMsg)
+	parentMsg := GenerateParentAttendanceNotification("Budi Santoso", "X IPA 1", "H", "Hadir", "Pak Guru")
+	if !strings.Contains(parentMsg, "Jam Masuk:") {
+		t.Errorf("Parent notification missing Jam Masuk: %s", parentMsg)
+	}
+	if strings.Contains(parentMsg, "Jam Pulang:") {
+		t.Errorf("Parent notification should NOT have Jam Pulang: %s", parentMsg)
 	}
 }

@@ -573,14 +573,9 @@ func GenerateStudentAttendanceNotification(name, status, keterangan, teacherName
 	emoji := map[string]string{"H": "✅", "I": "📝", "S": "🤒", "A": "❌"}
 	now := jakartaNow()
 
-	pulang := ""
-	if len(jamPulang) > 0 && jamPulang[0] != "" {
-		pulang = jamPulang[0]
-	}
-
-	timeInfo := fmt.Sprintf("⏰ Jam: %s", now.Format("15:04"))
-	if status == "H" && pulang != "" {
-		timeInfo = fmt.Sprintf("⏰ Jam Masuk: %s\n🏠 Jam Pulang: %s", now.Format("15:04"), formatTimeStr(pulang))
+	timeLabel := "⏰ Jam"
+	if status == "H" {
+		timeLabel = "⏰ Jam Masuk"
 	}
 
 	return fmt.Sprintf(`%s *Notifikasi Absensi*
@@ -590,13 +585,13 @@ func GenerateStudentAttendanceNotification(name, status, keterangan, teacherName
 Guru telah mencatat absensi Anda:
 
 📅 Tanggal: %s
-%s
+%s: %s
 📊 Status: *%s*
 📝 Keterangan: %s
 👨‍🏫 Dicatat oleh: %s
 
 _Pastikan data absensi Anda sudah benar._`,
-		emoji[status], name, formatDate(now), timeInfo,
+		emoji[status], name, formatDate(now), timeLabel, now.Format("15:04"),
 		formatStatusText(status), keterangan, teacherName)
 }
 
@@ -636,14 +631,9 @@ func GenerateParentAttendanceNotification(name, class, status, keterangan, teach
 	emoji := map[string]string{"H": "✅", "I": "📝", "S": "🤒", "A": "❌", "B": "🚫"}
 	now := jakartaNow()
 
-	pulang := ""
-	if len(jamPulang) > 0 && jamPulang[0] != "" {
-		pulang = jamPulang[0]
-	}
-
-	timeInfo := fmt.Sprintf("⏰ Jam: %s", now.Format("15:04"))
-	if status == "H" && pulang != "" {
-		timeInfo = fmt.Sprintf("⏰ Jam Masuk: %s\n🏠 Jam Pulang: %s", now.Format("15:04"), formatTimeStr(pulang))
+	timeLabel := "⏰ Jam"
+	if status == "H" {
+		timeLabel = "⏰ Jam Masuk"
 	}
 
 	return fmt.Sprintf(`%s *Notifikasi Absensi Siswa*
@@ -653,14 +643,14 @@ func GenerateParentAttendanceNotification(name, class, status, keterangan, teach
 👤 Nama: *%s*
 📚 Kelas: %s
 📅 Tanggal: %s
-%s
+%s: %s
 📊 Status: *%s*
 📝 Keterangan: %s
 👨‍🏫 Dicatat oleh: %s
 
 _Terima kasih atas perhatiannya._`,
 		emoji[status], name, name, orDash(class),
-		formatDate(now), timeInfo,
+		formatDate(now), timeLabel, now.Format("15:04"),
 		formatStatusText(status), keterangan, teacherName)
 }
 
