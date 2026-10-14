@@ -253,15 +253,30 @@ Contoh:
 💡 _Ketik keterangan_`, studentName, statusText[status])
 }
 
-func GenerateAttendanceConfirmation(studentName, studentClass, status, keterangan string) string {
+func GenerateAttendanceConfirmation(studentName, studentClass, status, keterangan string, jamPulang ...string) string {
 	emoji := map[string]string{"H": "✅", "I": "📝", "S": "🤒", "A": "❌"}
 	now := jakartaNow()
+
+	pulang := ""
+	if len(jamPulang) > 0 && jamPulang[0] != "" {
+		pulang = jamPulang[0]
+	}
+
+	timeInfo := fmt.Sprintf("⏰ Jam: %s", now.Format("15:04"))
+	if status == "H" {
+		if pulang != "" {
+			timeInfo = fmt.Sprintf("⏰ Jam Masuk: %s\n🏠 Jam Pulang: %s", now.Format("15:04"), formatTimeStr(pulang))
+		} else {
+			timeInfo = fmt.Sprintf("⏰ Jam Masuk: %s", now.Format("15:04"))
+		}
+	}
+
 	return fmt.Sprintf(`%s *Absensi Berhasil Dicatat*
 
 👤 Nama: *%s*
 📚 Kelas: %s
 📅 Tanggal: %s
-⏰ Jam: %s
+%s
 📊 Status: *%s*
 📝 Keterangan: %s
 
@@ -269,7 +284,7 @@ _Absensi telah tersimpan dalam sistem._ ✨
 
 Ketik `+"`"+`absen [nama]`+"`"+` untuk absen siswa lain.`,
 		emoji[status], studentName, orDash(studentClass),
-		formatDate(now), now.Format("15:04"),
+		formatDate(now), timeInfo,
 		formatStatusText(status), keterangan)
 }
 
@@ -554,9 +569,20 @@ func GenerateRecapMessage(student *Siswa, stats *AttendanceStats, period string)
 
 // ─── Notification Messages ────────────────────────────────────────────────────
 
-func GenerateStudentAttendanceNotification(name, status, keterangan, teacherName string) string {
+func GenerateStudentAttendanceNotification(name, status, keterangan, teacherName string, jamPulang ...string) string {
 	emoji := map[string]string{"H": "✅", "I": "📝", "S": "🤒", "A": "❌"}
 	now := jakartaNow()
+
+	pulang := ""
+	if len(jamPulang) > 0 && jamPulang[0] != "" {
+		pulang = jamPulang[0]
+	}
+
+	timeInfo := fmt.Sprintf("⏰ Jam: %s", now.Format("15:04"))
+	if status == "H" && pulang != "" {
+		timeInfo = fmt.Sprintf("⏰ Jam Masuk: %s\n🏠 Jam Pulang: %s", now.Format("15:04"), formatTimeStr(pulang))
+	}
+
 	return fmt.Sprintf(`%s *Notifikasi Absensi*
 
 👋 Halo, *%s*!
@@ -564,13 +590,13 @@ func GenerateStudentAttendanceNotification(name, status, keterangan, teacherName
 Guru telah mencatat absensi Anda:
 
 📅 Tanggal: %s
-⏰ Jam: %s
+%s
 📊 Status: *%s*
 📝 Keterangan: %s
 👨‍🏫 Dicatat oleh: %s
 
 _Pastikan data absensi Anda sudah benar._`,
-		emoji[status], name, formatDate(now), now.Format("15:04"),
+		emoji[status], name, formatDate(now), timeInfo,
 		formatStatusText(status), keterangan, teacherName)
 }
 
@@ -606,9 +632,20 @@ Guru telah mencatat absen pulang Anda:
 _Hati-hati di jalan, sampai jumpa besok!_ 👋`, name, formatDate(now), formatTimeStr(jamMasuk), now.Format("15:04"), teacherName)
 }
 
-func GenerateParentAttendanceNotification(name, class, status, keterangan, teacherName string) string {
+func GenerateParentAttendanceNotification(name, class, status, keterangan, teacherName string, jamPulang ...string) string {
 	emoji := map[string]string{"H": "✅", "I": "📝", "S": "🤒", "A": "❌", "B": "🚫"}
 	now := jakartaNow()
+
+	pulang := ""
+	if len(jamPulang) > 0 && jamPulang[0] != "" {
+		pulang = jamPulang[0]
+	}
+
+	timeInfo := fmt.Sprintf("⏰ Jam: %s", now.Format("15:04"))
+	if status == "H" && pulang != "" {
+		timeInfo = fmt.Sprintf("⏰ Jam Masuk: %s\n🏠 Jam Pulang: %s", now.Format("15:04"), formatTimeStr(pulang))
+	}
+
 	return fmt.Sprintf(`%s *Notifikasi Absensi Siswa*
 
 🏫 Yth. Wali Murid *%s*
@@ -616,14 +653,14 @@ func GenerateParentAttendanceNotification(name, class, status, keterangan, teach
 👤 Nama: *%s*
 📚 Kelas: %s
 📅 Tanggal: %s
-⏰ Jam: %s
+%s
 📊 Status: *%s*
 📝 Keterangan: %s
 👨‍🏫 Dicatat oleh: %s
 
 _Terima kasih atas perhatiannya._`,
 		emoji[status], name, name, orDash(class),
-		formatDate(now), now.Format("15:04"),
+		formatDate(now), timeInfo,
 		formatStatusText(status), keterangan, teacherName)
 }
 

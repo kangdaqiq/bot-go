@@ -309,12 +309,81 @@ func GetStudentAttendanceToday(studentID uint) (*Attendance, error) {
 	return &att, nil
 }
 
-func CreateManualAttendance(studentID uint, status, teacherName, keterangan, schoolID string, teacherID uint) error {
+// GetTodayScheduledJamPulang returns the scheduled jam_pulang for a school today (e.g. "12:00:00").
+func GetTodayScheduledJamPulang(schoolID interface{}) string {
+	loc := GetJakartaLocation()
+	now := time.Now().In(loc)
+	weekday := int(now.Weekday())
+	indexHari := weekday
+	if weekday == 0 {
+		indexHari = 7
+	}
+
+	var result struct {
+		JamPulang string `gorm:"column:jam_pulang"`
+	}
+
+	err := config.DB.Table("jadwal").
+		Select("jam_pulang").
+		Where("school_id = ? AND index_hari = ? AND is_active = 1", schoolID, indexHari).
+		First(&result).Error
+
+	if err == nil && result.JamPulang != "" {
+		return result.JamPulang
+	}
+
+	// Fallback if not found for specific school_id
+	config.DB.Table("jadwal").
+		Select("jam_pulang").
+		Where("school_id IS NULL AND index_hari = ? AND is_active = 1", indexHari).
+		First(&result)
+
+	return result.JamPulang
+}
+
+func calculateTotalSeconds(masukStr, pulangStr string) int {
+	layouts := []string{"15:04:05", "15:04"}
+	var tMasuk, tPulang time.Time
+	for _, l := range layouts {
+		if t, err := time.Parse(l, masukStr); err == nil {
+			tMasuk = t
+			break
+		}
+	}
+	for _, l := range layouts {
+		if t, err := time.Parse(l, pulangStr); err == nil {
+			tPulang = t
+			break
+		}
+	}
+	if !tMasuk.IsZero() && !tPulang.IsZero() && tPulang.After(tMasuk) {
+		return int(tPulang.Sub(tMasuk).Seconds())
+	}
+	return 0
+}
+
+func CreateManualAttendance(studentID uint, status, teacherName, keterangan, schoolID string, teacherID uint) (string, error) {
 	todayStr := today()
 	nowStr := nowTime()
 	finalKet := keterangan
 	if finalKet == "" {
 		finalKet = fmt.Sprintf("Absen manual oleh %s", teacherName)
+	}
+
+	var scheduledJamPulang string
+	var totalSecs int
+
+	if status == "H" {
+		targetSchoolID := schoolID
+		var studentSchoolID uint
+		if err := config.DB.Table("siswa").Select("school_id").Where("id = ?", studentID).Scan(&studentSchoolID).Error; err == nil && studentSchoolID != 0 {
+			targetSchoolID = fmt.Sprintf("%d", studentSchoolID)
+		}
+
+		scheduledJamPulang = GetTodayScheduledJamPulang(targetSchoolID)
+		if scheduledJamPulang != "" {
+			totalSecs = calculateTotalSeconds(nowStr, scheduledJamPulang)
+		}
 	}
 
 	var existing Attendance
@@ -325,9 +394,22 @@ func CreateManualAttendance(studentID uint, status, teacherName, keterangan, sch
 	if err == nil {
 		// update
 		if status == "H" {
+			updates := map[string]interface{}{
+				"jam_masuk":   nowStr,
+				"status":      status,
+				"keterangan":  finalKet,
+				"updated_at":  time.Now(),
+			}
+			if scheduledJamPulang != "" {
+				updates["jam_pulang"] = scheduledJamPulang
+				updates["total_seconds"] = totalSecs
+			}
+			if teacherID != 0 {
+				updates["checked_in_by_teacher_id"] = teacherID
+			}
 			config.DB.Table("attendance").
 				Where("student_id = ? AND tanggal = ?", studentID, todayStr).
-				Updates(map[string]interface{}{"jam_masuk": nowStr, "status": status, "keterangan": finalKet, "updated_at": time.Now()})
+				Updates(updates)
 		} else {
 			config.DB.Table("attendance").
 				Where("student_id = ? AND tanggal = ?", studentID, todayStr).
@@ -336,10 +418,31 @@ func CreateManualAttendance(studentID uint, status, teacherName, keterangan, sch
 	} else {
 		// insert
 		if status == "H" {
-			config.DB.Exec(
-				"INSERT INTO attendance (student_id, tanggal, jam_masuk, status, keterangan, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
-				studentID, todayStr, nowStr, status, finalKet,
-			)
+			if scheduledJamPulang != "" {
+				if teacherID != 0 {
+					config.DB.Exec(
+						"INSERT INTO attendance (student_id, tanggal, jam_masuk, jam_pulang, total_seconds, status, keterangan, checked_in_by_teacher_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+						studentID, todayStr, nowStr, scheduledJamPulang, totalSecs, status, finalKet, teacherID,
+					)
+				} else {
+					config.DB.Exec(
+						"INSERT INTO attendance (student_id, tanggal, jam_masuk, jam_pulang, total_seconds, status, keterangan, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+						studentID, todayStr, nowStr, scheduledJamPulang, totalSecs, status, finalKet,
+					)
+				}
+			} else {
+				if teacherID != 0 {
+					config.DB.Exec(
+						"INSERT INTO attendance (student_id, tanggal, jam_masuk, status, keterangan, checked_in_by_teacher_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())",
+						studentID, todayStr, nowStr, status, finalKet, teacherID,
+					)
+				} else {
+					config.DB.Exec(
+						"INSERT INTO attendance (student_id, tanggal, jam_masuk, status, keterangan, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+						studentID, todayStr, nowStr, status, finalKet,
+					)
+				}
+			}
 		} else {
 			config.DB.Exec(
 				"INSERT INTO attendance (student_id, tanggal, status, keterangan, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())",
@@ -349,16 +452,49 @@ func CreateManualAttendance(studentID uint, status, teacherName, keterangan, sch
 	}
 
 	// Notify student & parent in background
-	go NotifyStudentAndParentAttendance(studentID, status, finalKet, teacherName, schoolID)
-	return nil
+	go NotifyStudentAndParentAttendance(studentID, status, finalKet, teacherName, schoolID, scheduledJamPulang)
+	return scheduledJamPulang, nil
 }
 
 func UpdateAttendanceStatus(studentID uint, status, teacherName, schoolID string) error {
 	todayStr := today()
+	nowStr := nowTime()
 	keterangan := fmt.Sprintf("Status diubah oleh %s", teacherName)
+
+	updates := map[string]interface{}{
+		"status":     status,
+		"keterangan": keterangan,
+		"updated_at": time.Now(),
+	}
+
+	if status == "H" {
+		var existing Attendance
+		if err := config.DB.Table("attendance").Where("student_id = ? AND tanggal = ?", studentID, todayStr).First(&existing).Error; err == nil {
+			if existing.JamMasuk == "" {
+				updates["jam_masuk"] = nowStr
+			}
+			if existing.JamPulang == "" {
+				targetSchoolID := schoolID
+				var studentSchoolID uint
+				if err := config.DB.Table("siswa").Select("school_id").Where("id = ?", studentID).Scan(&studentSchoolID).Error; err == nil && studentSchoolID != 0 {
+					targetSchoolID = fmt.Sprintf("%d", studentSchoolID)
+				}
+				scheduledJamPulang := GetTodayScheduledJamPulang(targetSchoolID)
+				if scheduledJamPulang != "" {
+					updates["jam_pulang"] = scheduledJamPulang
+					masuk := existing.JamMasuk
+					if masuk == "" {
+						masuk = nowStr
+					}
+					updates["total_seconds"] = calculateTotalSeconds(masuk, scheduledJamPulang)
+				}
+			}
+		}
+	}
+
 	config.DB.Table("attendance").
 		Where("student_id = ? AND tanggal = ?", studentID, todayStr).
-		Updates(map[string]interface{}{"status": status, "keterangan": keterangan, "updated_at": time.Now()})
+		Updates(updates)
 	go NotifyStudentAndParentEdit(studentID, status, keterangan, teacherName, schoolID)
 	return nil
 }
@@ -471,14 +607,18 @@ func IsWithinTwoDays(lastSeen *time.Time) bool {
 	return lastSeen.After(limit)
 }
 
-func NotifyStudentAndParentAttendance(studentID uint, status, keterangan, teacherName, schoolID string) {
+func NotifyStudentAndParentAttendance(studentID uint, status, keterangan, teacherName, schoolID string, jamPulang ...string) {
 	s, err := getStudentWithClass(studentID)
 	if err != nil || s == nil {
 		return
 	}
+	pulang := ""
+	if len(jamPulang) > 0 {
+		pulang = jamPulang[0]
+	}
 	if s.NoWa != "" {
 		if IsWithinTwoDays(s.LastSeenSiswa) {
-			msg := GenerateStudentAttendanceNotification(s.Nama, status, keterangan, teacherName)
+			msg := GenerateStudentAttendanceNotification(s.Nama, status, keterangan, teacherName, pulang)
 			SendMessage(s.NoWa, msg, schoolID)
 		} else {
 			fmt.Printf("⚠️ Skip student notification to %s: No interaction within 2 days\n", s.NoWa)
@@ -486,7 +626,7 @@ func NotifyStudentAndParentAttendance(studentID uint, status, keterangan, teache
 	}
 	if s.WaOrtu != "" {
 		if IsWithinTwoDays(s.LastSeenOrtu) {
-			msg := GenerateParentAttendanceNotification(s.Nama, s.NamaKelas, status, keterangan, teacherName)
+			msg := GenerateParentAttendanceNotification(s.Nama, s.NamaKelas, status, keterangan, teacherName, pulang)
 			SendMessage(s.WaOrtu, msg, schoolID)
 		} else {
 			fmt.Printf("⚠️ Skip parent notification to %s: No interaction within 2 days\n", s.WaOrtu)

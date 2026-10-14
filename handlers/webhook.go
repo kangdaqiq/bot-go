@@ -289,8 +289,8 @@ func handleTeacherMessage(replyTo, body string, teacher *services.Guru, deviceID
 		if keterangan == "" {
 			responseMessage = "âŒ *Keterangan tidak boleh kosong*\n\nSilakan ketik keterangan untuk absensi ini."
 		} else {
-			services.CreateManualAttendance(session.SelectedStudent.ID, session.SelectedStatus, session.TeacherName, keterangan, deviceID, session.TeacherID)
-			responseMessage = services.GenerateAttendanceConfirmation(session.SelectedStudent.Nama, session.SelectedStudent.NamaKelas, session.SelectedStatus, keterangan)
+			jamPulang, _ := services.CreateManualAttendance(session.SelectedStudent.ID, session.SelectedStatus, session.TeacherName, keterangan, deviceID, session.TeacherID)
+			responseMessage = services.GenerateAttendanceConfirmation(session.SelectedStudent.Nama, session.SelectedStudent.NamaKelas, session.SelectedStatus, keterangan, jamPulang)
 			services.ClearSession(phoneNumber)
 		}
 
@@ -420,9 +420,9 @@ func handleSelectOption(option int, session *services.Session, phoneNumber, devi
 		}
 		if status == "H" {
 			ket := "Hadir (dicatat oleh " + session.TeacherName + ")"
-			services.CreateManualAttendance(session.SelectedStudent.ID, status, session.TeacherName, ket, deviceID, session.TeacherID)
+			jamPulang, _ := services.CreateManualAttendance(session.SelectedStudent.ID, status, session.TeacherName, ket, deviceID, session.TeacherID)
 			services.ClearSession(phoneNumber)
-			return services.GenerateAttendanceConfirmation(session.SelectedStudent.Nama, session.SelectedStudent.NamaKelas, status, ket)
+			return services.GenerateAttendanceConfirmation(session.SelectedStudent.Nama, session.SelectedStudent.NamaKelas, status, ket, jamPulang)
 		}
 		session.Step = "input_keterangan"
 		session.SelectedStatus = status
