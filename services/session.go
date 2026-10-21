@@ -3,6 +3,8 @@ package services
 import (
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -167,6 +169,16 @@ var (
 	lastCacheTime   time.Time
 )
 
+func cleanJIDPhone(jid string) string {
+	if idx := strings.Index(jid, "@"); idx != -1 {
+		jid = jid[:idx]
+	}
+	if idx := strings.Index(jid, ":"); idx != -1 {
+		jid = jid[:idx]
+	}
+	return NormalizePhone(jid)
+}
+
 func ResolveDeviceID(deviceID string) string {
 	if isSimpleID(deviceID) {
 		return deviceID
@@ -175,6 +187,11 @@ func ResolveDeviceID(deviceID string) string {
 	deviceCacheMu.RLock()
 	cacheValid := time.Since(lastCacheTime) < 60*time.Second
 	cached, inCache := deviceCache[deviceID]
+	if !inCache {
+		if phone := cleanJIDPhone(deviceID); phone != "" {
+			cached, inCache = deviceCache[phone]
+		}
+	}
 	deviceCacheMu.RUnlock()
 
 	if cacheValid && inCache {
@@ -187,53 +204,92 @@ func ResolveDeviceID(deviceID string) string {
 
 	var apiResult struct {
 		Results []struct {
-			ID  string `json:"id"`
-			JID string `json:"jid"`
+			ID       string `json:"id"`
+			DeviceID string `json:"device_id"`
+			JID      string `json:"jid"`
 		} `json:"results"`
 	}
-	_, err := deviceFetchClient.R().
+	resp, err := deviceFetchClient.R().
 		SetBasicAuth(config.WaAPIUser, config.WaAPIPassword).
 		SetResult(&apiResult).
 		Get(config.WaAPIURL + "/devices")
 
+	if err != nil {
+		log.Printf("⚠️ GoWA API tidak bisa diakses: %v", err)
+	} else if resp != nil && resp.StatusCode() != 200 {
+		log.Printf("⚠️ GoWA API /devices error (status %d): %s", resp.StatusCode(), resp.String())
+	}
+
 	deviceCacheMu.Lock()
-	if err == nil && len(apiResult.Results) > 0 {
+	if err == nil && resp != nil && resp.StatusCode() == 200 && len(apiResult.Results) > 0 {
 		for _, d := range apiResult.Results {
-			if d.JID != "" {
-				deviceCache[d.JID] = d.ID
-				parts := splitAt(d.JID)
-				if len(parts) == 2 {
-					deviceCache[parts[0]] = d.ID
-				}
+			targetID := d.ID
+			if targetID == "" {
+				targetID = d.DeviceID
 			}
-			if d.ID != "" {
-				deviceCache[d.ID] = d.ID
+			if targetID == "" {
+				continue
+			}
+
+			// Simpan mapping direct device_id (misal "3" -> "3")
+			deviceCache[targetID] = targetID
+
+			if d.JID != "" {
+				deviceCache[d.JID] = targetID
+				phone := cleanJIDPhone(d.JID)
+				if phone != "" {
+					deviceCache[phone] = targetID
+					deviceCache[phone+"@s.whatsapp.net"] = targetID
+				}
 			}
 		}
 		lastCacheTime = time.Now()
 		log.Printf("✅ Device cache diperbarui dari GoWA API: %d device(s)", len(apiResult.Results))
-	} else if err != nil {
-		log.Printf("⚠️ GoWA API tidak bisa diakses: %v", err)
 	}
 	deviceCacheMu.Unlock()
 
 	deviceCacheMu.RLock()
 	id, ok := deviceCache[deviceID]
+	if !ok {
+		if phone := cleanJIDPhone(deviceID); phone != "" {
+			id, ok = deviceCache[phone]
+		}
+	}
 	deviceCacheMu.RUnlock()
 	if ok {
 		return id
 	}
 
-	// Fallback jika API gagal
+	// Fallback ke database jika nomor bot terdaftar di schools.phone atau operator_phone
+	if config.DB != nil {
+		phone := cleanJIDPhone(deviceID)
+		if phone != "" {
+			variants := phoneVariants(phone)
+			var schoolID uint
+			if err := config.DB.Table("schools").
+				Select("id").
+				Where("phone IN ? OR operator_phone IN ?", variants, variants).
+				Limit(1).
+				Scan(&schoolID).Error; err == nil && schoolID > 0 {
+				res := strconv.FormatUint(uint64(schoolID), 10)
+				log.Printf("✅ Device ID terdeteksi dari database schools (%s -> %s)", phone, res)
+				deviceCacheMu.Lock()
+				deviceCache[deviceID] = res
+				deviceCache[phone] = res
+				deviceCacheMu.Unlock()
+				return res
+			}
+		}
+	}
+
+	// Fallback jika API & DB gagal
 	if envID := os.Getenv("WA_DEVICE_ID"); envID != "" {
 		log.Printf("⚠️ Menggunakan WA_DEVICE_ID dari .env: %s", envID)
 		return envID
 	}
-	if parts := splitAt(deviceID); len(parts) == 2 {
-		log.Printf("⚠️ Fallback strip JID: %s -> %s", deviceID, parts[0])
-		return parts[0]
-	}
-	return deviceID
+
+	log.Printf("⚠️ Device ID tidak dapat di-resolve untuk %s, fallback ke default '1'", deviceID)
+	return "1"
 }
 
 func isSimpleID(s string) bool {
@@ -246,13 +302,4 @@ func isSimpleID(s string) bool {
 		}
 	}
 	return len(s) > 0
-}
-
-func splitAt(s string) []string {
-	for i, c := range s {
-		if c == '@' {
-			return []string{s[:i], s[i+1:]}
-		}
-	}
-	return []string{s}
 }

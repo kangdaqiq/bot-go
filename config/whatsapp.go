@@ -25,7 +25,17 @@ func InitWhatsApp() {
 	}
 
 	WaAPIUser = os.Getenv("GOWA_API_USER")
+	if WaAPIUser == "" {
+		WaAPIUser = os.Getenv("WA_API_USER")
+	}
+
 	WaAPIPassword = os.Getenv("GOWA_API_PASS")
+	if WaAPIPassword == "" {
+		WaAPIPassword = os.Getenv("GOWA_API_PASSWORD")
+		if WaAPIPassword == "" {
+			WaAPIPassword = os.Getenv("WA_API_PASSWORD")
+		}
+	}
 
 	WaClient = resty.New()
 	WaClient.SetTimeout(10 * time.Second)

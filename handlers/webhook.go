@@ -52,15 +52,12 @@ func HandleWebhook(c *fiber.Ctx) error {
 	if rawDeviceID == "" {
 		rawDeviceID = c.Query("device_id")
 	}
-	if rawDeviceID == "" {
-		rawDeviceID = "1"
-	}
 
 	// Resolve nested payload
 	var payload MessagePayload
 	if wb.Event == "message" && wb.Payload.From != "" {
 		payload = wb.Payload
-		if wb.DeviceID != "" {
+		if rawDeviceID == "" && wb.DeviceID != "" {
 			rawDeviceID = wb.DeviceID
 		}
 	} else {
@@ -71,9 +68,13 @@ func HandleWebhook(c *fiber.Ctx) error {
 		payload.Pushname = wb.Pushname
 		payload.SenderID = wb.SenderID
 		payload.Body = wb.Body
-		if wb.DeviceID != "" {
+		if rawDeviceID == "" && wb.DeviceID != "" {
 			rawDeviceID = wb.DeviceID
 		}
+	}
+
+	if rawDeviceID == "" {
+		rawDeviceID = "1"
 	}
 
 	// Normalize flat body -> message.text
