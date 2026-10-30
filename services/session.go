@@ -119,7 +119,7 @@ func SendMessage(phone, message, deviceID string) SendResult {
 	}
 
 	// Normalize phone
-	if !containsAt(phone) && len(phone) <= 15 {
+	if !containsAt(phone) {
 		phone = NormalizePhone(phone)
 	}
 

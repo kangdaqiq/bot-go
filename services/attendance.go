@@ -71,22 +71,50 @@ func NormalizePhone(phone string) string {
 		return -1
 	}, phone)
 
+	if cleaned == "" {
+		return ""
+	}
+
+	// Prefix 00 (international dialing prefix seperti 0060...) dihilangkan
+	if strings.HasPrefix(cleaned, "00") {
+		cleaned = cleaned[2:]
+	}
+
+	// Format nomor lokal Indonesia diawali 0 (misal: 0812...) -> ubah 0 jadi 62
 	if strings.HasPrefix(cleaned, "0") {
 		return "62" + cleaned[1:]
 	}
-	if !strings.HasPrefix(cleaned, "62") {
+
+	// Format nomor Indonesia tanpa awalan 0 tapi diawali 8 (misal: 812...) -> tambahkan 62
+	if strings.HasPrefix(cleaned, "8") {
 		return "62" + cleaned
 	}
+
+	// Jika sudah diawali kode negara (baik 62 untuk Indonesia atau kode negara lain seperti 60, 966, 1, dll)
 	return cleaned
 }
 
 func phoneVariants(phone string) []string {
 	norm := NormalizePhone(phone)
-	var variants []string
-	variants = append(variants, norm)
+	if norm == "" {
+		return nil
+	}
+
+	variantsMap := make(map[string]bool)
+	variantsMap[norm] = true
+	variantsMap["+"+norm] = true
+
 	if strings.HasPrefix(norm, "62") {
-		variants = append(variants, "0"+norm[2:])
-		variants = append(variants, norm[2:])
+		variantsMap["0"+norm[2:]] = true
+		variantsMap[norm[2:]] = true
+		variantsMap["+62"+norm[2:]] = true
+	} else {
+		variantsMap["00"+norm] = true
+	}
+
+	var variants []string
+	for v := range variantsMap {
+		variants = append(variants, v)
 	}
 	return variants
 }
