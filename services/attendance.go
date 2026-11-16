@@ -28,12 +28,45 @@ type Siswa struct {
 }
 
 type Guru struct {
-	ID        uint       `gorm:"column:id"`
-	Nama      string     `gorm:"column:nama"`
-	NoWa      string     `gorm:"column:no_wa"`
-	SchoolID  uint       `gorm:"column:school_id"`
-	BotAccess bool       `gorm:"column:bot_access"`
-	LastSeen  *time.Time `gorm:"column:last_seen"`
+	ID             uint       `gorm:"column:id"`
+	UserID         *uint      `gorm:"column:user_id"`
+	Nama           string     `gorm:"column:nama"`
+	NoWa           string     `gorm:"column:no_wa"`
+	SchoolID       uint       `gorm:"column:school_id"`
+	BotAccess      bool       `gorm:"column:bot_access"`
+	IsGlobalReport bool       `gorm:"column:is_global_report"`
+	LastSeen       *time.Time `gorm:"column:last_seen"`
+}
+
+type StudentLeave struct {
+	ID             uint       `gorm:"column:id"`
+	SchoolID       uint       `gorm:"column:school_id"`
+	StudentID      uint       `gorm:"column:student_id"`
+	Code           string     `gorm:"column:code"`
+	Jenis          string     `gorm:"column:jenis"`
+	TanggalMulai   string     `gorm:"column:tanggal_mulai"`
+	TanggalSelesai string     `gorm:"column:tanggal_selesai"`
+	Keterangan     string     `gorm:"column:keterangan"`
+	BuktiFoto      string     `gorm:"column:bukti_foto"`
+	Pengaju        string     `gorm:"column:pengaju"`
+	NamaPengaju    string     `gorm:"column:nama_pengaju"`
+	NoWaPengaju    string     `gorm:"column:no_wa_pengaju"`
+	Status         string     `gorm:"column:status"`
+	ApprovedBy     *uint      `gorm:"column:approved_by"`
+	ApprovedAt     *time.Time `gorm:"column:approved_at"`
+	RejectedReason string     `gorm:"column:rejected_reason"`
+	CreatedAt      time.Time  `gorm:"column:created_at"`
+	UpdatedAt      time.Time  `gorm:"column:updated_at"`
+
+	// Joined fields
+	NamaSiswa    string `gorm:"column:nama_siswa"`
+	NIS          string `gorm:"column:nis"`
+	NoWaSiswa    string `gorm:"column:no_wa_siswa"`
+	WaOrtu       string `gorm:"column:wa_ortu"`
+	NamaKelas    string `gorm:"column:nama_kelas"`
+	KelasID      uint   `gorm:"column:kelas_id"`
+	WaliKelasID  *uint  `gorm:"column:wali_kelas_id"`
+	WaliKelas2ID *uint  `gorm:"column:wali_kelas_2_id"`
 }
 
 type Attendance struct {
@@ -788,4 +821,287 @@ func UpdateLastSeen(phone string) {
 	if err := config.DB.Table("guru").Where("no_wa IN ?", variants).Update("last_seen", now).Error; err != nil {
 		fmt.Printf("Error updating last_seen for guru phone %s: %v\n", phone, err)
 	}
+}
+
+// ─── Student Leave Approval & Management ─────────────────────────────────────
+
+func FormatDateRangeIndo(start, end string) string {
+	tStart, errStart := time.Parse("2006-01-02", start)
+	tEnd, errEnd := time.Parse("2006-01-02", end)
+	if errStart != nil || errEnd != nil {
+		if start == end || end == "" {
+			return start
+		}
+		return fmt.Sprintf("%s s/d %s", start, end)
+	}
+	fStart := tStart.Format("02/01/2006")
+	fEnd := tEnd.Format("02/01/2006")
+	if fStart == fEnd {
+		return fStart
+	}
+	return fmt.Sprintf("%s s/d %s", fStart, fEnd)
+}
+
+func getUniquePhones(phones ...string) []string {
+	var result []string
+	seen := make(map[string]bool)
+	for _, p := range phones {
+		norm := NormalizePhone(p)
+		if norm != "" && !seen[norm] {
+			seen[norm] = true
+			result = append(result, norm)
+		}
+	}
+	return result
+}
+
+func GetStudentLeaveByCode(code string, schoolID string) (*StudentLeave, error) {
+	var leave StudentLeave
+	query := config.DB.Table("student_leaves l").
+		Select("l.*, s.nama as nama_siswa, s.nis, s.no_wa as no_wa_siswa, s.wa_ortu, s.kelas_id, k.nama_kelas, k.wali_kelas_id, k.wali_kelas_2_id").
+		Joins("INNER JOIN siswa s ON l.student_id = s.id").
+		Joins("LEFT JOIN kelas k ON s.kelas_id = k.id").
+		Where("UPPER(l.code) = UPPER(?)", code)
+
+	if schoolID != "" && schoolID != "1" {
+		query = query.Where("l.school_id = ?", schoolID)
+	}
+
+	result := query.First(&leave)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &leave, nil
+}
+
+func ApproveStudentLeaveByTeacher(code string, teacher *Guru, schoolID string) string {
+	if code == "" {
+		return "⚠️ *Kode Izin Kosong*\n\nSilakan tentukan kode izin yang ingin disetujui.\nContoh: `acc IZIN-ABC123`\n\nKetik `izin pending` untuk melihat daftar pengajuan."
+	}
+
+	leave, err := GetStudentLeaveByCode(code, schoolID)
+	if err != nil {
+		return fmt.Sprintf("❌ *Gagal Mengambil Data Izin*\n\nTerjadi kesalahan database: %v", err)
+	}
+	if leave == nil {
+		return fmt.Sprintf("⚠️ *Pengajuan Izin Tidak Ditemukan*\n\nKode izin *%s* tidak ditemukan pada sistem sekolah Anda.\n\nPastikan kode yang dimasukkan sudah benar atau ketik `izin pending`.", code)
+	}
+
+	// Cek Hak Akses (Wali Kelas 1 / Wali Kelas 2 atau Global Report)
+	isWali := (leave.WaliKelasID != nil && *leave.WaliKelasID == teacher.ID) ||
+		(leave.WaliKelas2ID != nil && *leave.WaliKelas2ID == teacher.ID)
+
+	if !isWali && !teacher.IsGlobalReport {
+		return fmt.Sprintf("⚠️ *Akses Ditolak*\n\nBapak/Ibu *%s* bukan Wali Kelas dari siswa *%s* (%s), sehingga tidak memiliki hak akses untuk menyetujui pengajuan izin ini.", teacher.Nama, leave.NamaSiswa, leave.NamaKelas)
+	}
+
+	// Cek Status Pengajuan
+	if leave.Status != "pending" {
+		if leave.Status == "approved" {
+			return fmt.Sprintf("ℹ️ *Pengajuan Sudah Disetujui*\n\nPengajuan izin kode *%s* an. *%s* (%s) sudah berstatus *Disetujui* sebelumnya.", leave.Code, leave.NamaSiswa, leave.NamaKelas)
+		}
+		if leave.Status == "rejected" {
+			return fmt.Sprintf("ℹ️ *Pengajuan Sudah Ditolak*\n\nPengajuan izin kode *%s* an. *%s* (%s) sudah berstatus *Ditolak* sebelumnya.", leave.Code, leave.NamaSiswa, leave.NamaKelas)
+		}
+		return fmt.Sprintf("ℹ️ *Status Pengajuan: %s*\n\nHanya pengajuan berstatus pending yang dapat disetujui.", leave.Status)
+	}
+
+	now := time.Now()
+	var approverID *uint = teacher.UserID
+	if approverID == nil || *approverID == 0 {
+		var uID uint
+		if err := config.DB.Table("users").Select("id").Where("id = ? OR username = ?", teacher.ID, teacher.Nama).Scan(&uID).Error; err == nil && uID > 0 {
+			approverID = &uID
+		}
+	}
+
+	updates := map[string]interface{}{
+		"status":          "approved",
+		"approved_at":     now,
+		"rejected_reason": nil,
+		"updated_at":      now,
+	}
+	if approverID != nil && *approverID > 0 {
+		updates["approved_by"] = *approverID
+	}
+
+	if err := config.DB.Table("student_leaves").Where("id = ?", leave.ID).Updates(updates).Error; err != nil {
+		return fmt.Sprintf("❌ *Gagal Menyetujui Izin*\n\nTerjadi kesalahan database: %v", err)
+	}
+
+	// Sinkronisasi ke tabel attendance
+	startDate, errStart := time.Parse("2006-01-02", leave.TanggalMulai)
+	endDate, errEnd := time.Parse("2006-01-02", leave.TanggalSelesai)
+
+	statusCode := "I"
+	if strings.ToLower(leave.Jenis) == "sakit" {
+		statusCode = "S"
+	}
+	keteranganAtt := fmt.Sprintf("[Pengajuan %s Disetujui %s] %s", strings.Title(leave.Jenis), teacher.Nama, leave.Keterangan)
+
+	if errStart == nil && errEnd == nil {
+		for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+			curDate := d.Format("2006-01-02")
+			var existingAtt Attendance
+			errFind := config.DB.Table("attendance").Where("student_id = ? AND tanggal = ?", leave.StudentID, curDate).First(&existingAtt).Error
+			if errFind == nil {
+				config.DB.Table("attendance").Where("id = ?", existingAtt.ID).Updates(map[string]interface{}{
+					"status":        statusCode,
+					"keterangan":    keteranganAtt,
+					"is_auto_alpha": 0,
+					"updated_at":    now,
+				})
+			} else {
+				config.DB.Exec(
+					"INSERT INTO attendance (student_id, tanggal, status, keterangan, is_auto_alpha, created_at, updated_at) VALUES (?, ?, ?, ?, 0, NOW(), NOW())",
+					leave.StudentID, curDate, statusCode, keteranganAtt,
+				)
+			}
+		}
+	}
+
+	// Kirim notifikasi WhatsApp ke Orang Tua / Siswa secara background
+	go func() {
+		targetSchoolID := schoolID
+		if targetSchoolID == "" || targetSchoolID == "1" {
+			targetSchoolID = fmt.Sprintf("%d", leave.SchoolID)
+		}
+		notifMsg := GenerateParentLeaveApprovedNotification(
+			leave.NamaSiswa,
+			leave.Jenis,
+			leave.TanggalMulai,
+			leave.TanggalSelesai,
+			teacher.Nama,
+		)
+
+		phones := getUniquePhones(leave.NoWaPengaju, leave.WaOrtu, leave.NoWaSiswa)
+		for _, p := range phones {
+			SendMessage(p, notifMsg, targetSchoolID)
+		}
+	}()
+
+	dateRange := FormatDateRangeIndo(leave.TanggalMulai, leave.TanggalSelesai)
+	return fmt.Sprintf("✅ *Pengajuan Izin Disetujui!*\n\nPermohonan *%s* untuk siswa:\n👤 Nama: *%s*\n🏫 Kelas: *%s*\n📅 Tanggal: *%s*\n\nData absensi siswa telah otomatis diperbarui dan notifikasi persetujuan telah diteruskan ke nomor orang tua/siswa.", strings.Title(leave.Jenis), leave.NamaSiswa, leave.NamaKelas, dateRange)
+}
+
+func RejectStudentLeaveByTeacher(code, reason string, teacher *Guru, schoolID string) string {
+	if code == "" {
+		return "⚠️ *Kode Izin Kosong*\n\nSilakan tentukan kode izin yang ingin ditolak.\nContoh: `tolak IZIN-ABC123 Alasan tidak jelas`\n\nKetik `izin pending` untuk melihat daftar pengajuan."
+	}
+
+	leave, err := GetStudentLeaveByCode(code, schoolID)
+	if err != nil {
+		return fmt.Sprintf("❌ *Gagal Mengambil Data Izin*\n\nTerjadi kesalahan database: %v", err)
+	}
+	if leave == nil {
+		return fmt.Sprintf("⚠️ *Pengajuan Izin Tidak Ditemukan*\n\nKode izin *%s* tidak ditemukan pada sistem sekolah Anda.\n\nPastikan kode yang dimasukkan sudah benar atau ketik `izin pending`.", code)
+	}
+
+	// Cek Hak Akses (Wali Kelas 1 / Wali Kelas 2 atau Global Report)
+	isWali := (leave.WaliKelasID != nil && *leave.WaliKelasID == teacher.ID) ||
+		(leave.WaliKelas2ID != nil && *leave.WaliKelas2ID == teacher.ID)
+
+	if !isWali && !teacher.IsGlobalReport {
+		return fmt.Sprintf("⚠️ *Akses Ditolak*\n\nBapak/Ibu *%s* bukan Wali Kelas dari siswa *%s* (%s), sehingga tidak memiliki hak akses untuk menolak pengajuan izin ini.", teacher.Nama, leave.NamaSiswa, leave.NamaKelas)
+	}
+
+	// Cek Status Pengajuan
+	if leave.Status != "pending" {
+		if leave.Status == "approved" {
+			return fmt.Sprintf("ℹ️ *Pengajuan Sudah Disetujui*\n\nPengajuan izin kode *%s* an. *%s* (%s) sudah berstatus *Disetujui* sebelumnya.", leave.Code, leave.NamaSiswa, leave.NamaKelas)
+		}
+		if leave.Status == "rejected" {
+			return fmt.Sprintf("ℹ️ *Pengajuan Sudah Ditolak*\n\nPengajuan izin kode *%s* an. *%s* (%s) sudah berstatus *Ditolak* sebelumnya.", leave.Code, leave.NamaSiswa, leave.NamaKelas)
+		}
+		return fmt.Sprintf("ℹ️ *Status Pengajuan: %s*\n\nHanya pengajuan berstatus pending yang dapat diproses.", leave.Status)
+	}
+
+	now := time.Now()
+	finalReason := strings.TrimSpace(reason)
+	if finalReason == "" {
+		finalReason = fmt.Sprintf("Ditolak oleh Wali Kelas (%s)", teacher.Nama)
+	}
+
+	updates := map[string]interface{}{
+		"status":          "rejected",
+		"rejected_reason": finalReason,
+		"approved_at":     now,
+		"updated_at":      now,
+	}
+	if teacher.UserID != nil && *teacher.UserID > 0 {
+		updates["approved_by"] = *teacher.UserID
+	}
+
+	if err := config.DB.Table("student_leaves").Where("id = ?", leave.ID).Updates(updates).Error; err != nil {
+		return fmt.Sprintf("❌ *Gagal Menolak Izin*\n\nTerjadi kesalahan database: %v", err)
+	}
+
+	// Kirim notifikasi WhatsApp penolakan ke Orang Tua / Siswa secara background
+	go func() {
+		targetSchoolID := schoolID
+		if targetSchoolID == "" || targetSchoolID == "1" {
+			targetSchoolID = fmt.Sprintf("%d", leave.SchoolID)
+		}
+		notifMsg := GenerateParentLeaveRejectedNotification(
+			leave.NamaSiswa,
+			leave.Jenis,
+			leave.TanggalMulai,
+			leave.TanggalSelesai,
+			teacher.Nama,
+			finalReason,
+		)
+
+		phones := getUniquePhones(leave.NoWaPengaju, leave.WaOrtu, leave.NoWaSiswa)
+		for _, p := range phones {
+			SendMessage(p, notifMsg, targetSchoolID)
+		}
+	}()
+
+	dateRange := FormatDateRangeIndo(leave.TanggalMulai, leave.TanggalSelesai)
+	return fmt.Sprintf("❌ *Pengajuan Izin Ditolak*\n\nPermohonan *%s* untuk siswa:\n👤 Nama: *%s*\n🏫 Kelas: *%s*\n📅 Tanggal: *%s*\n📌 Alasan: %s\n\nNotifikasi penolakan telah diteruskan ke nomor pengaju/orang tua.", strings.Title(leave.Jenis), leave.NamaSiswa, leave.NamaKelas, dateRange, finalReason)
+}
+
+func ListPendingLeavesForTeacher(teacher *Guru, schoolID string) string {
+	var leaves []StudentLeave
+	query := config.DB.Table("student_leaves l").
+		Select("l.*, s.nama as nama_siswa, s.nis, s.no_wa as no_wa_siswa, s.wa_ortu, s.kelas_id, k.nama_kelas, k.wali_kelas_id, k.wali_kelas_2_id").
+		Joins("INNER JOIN siswa s ON l.student_id = s.id").
+		Joins("LEFT JOIN kelas k ON s.kelas_id = k.id").
+		Where("l.status = 'pending'")
+
+	if teacher.SchoolID != 0 {
+		query = query.Where("l.school_id = ?", teacher.SchoolID)
+	}
+
+	if !teacher.IsGlobalReport {
+		query = query.Where("(k.wali_kelas_id = ? OR k.wali_kelas_2_id = ?)", teacher.ID, teacher.ID)
+	}
+
+	result := query.Order("l.created_at DESC").Limit(10).Find(&leaves)
+	if result.Error != nil || len(leaves) == 0 {
+		return fmt.Sprintf("📋 *Daftar Pengajuan Izin Menunggu Persetujuan*\n\nSaat ini *tidak ada* pengajuan izin berstatus pending di kelas yang Anda ampu (%s).\n\nSemua pengajuan telah selesai diproses.", teacher.Nama)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("📋 *Pengajuan Izin Menunggu Persetujuan (%d)*\n", len(leaves)))
+	sb.WriteString(fmt.Sprintf("Wali Kelas: *%s*\n\n", teacher.Nama))
+
+	for i, l := range leaves {
+		dateRange := FormatDateRangeIndo(l.TanggalMulai, l.TanggalSelesai)
+		sb.WriteString(fmt.Sprintf("%d. *%s* (%s)\n", i+1, l.NamaSiswa, l.NamaKelas))
+		sb.WriteString(fmt.Sprintf("   • Jenis: *%s*\n", strings.Title(l.Jenis)))
+		sb.WriteString(fmt.Sprintf("   • Tanggal: %s\n", dateRange))
+		sb.WriteString(fmt.Sprintf("   • Alasan: %s\n", l.Keterangan))
+		sb.WriteString(fmt.Sprintf("   • Kode: `%s`\n\n", l.Code))
+	}
+
+	sb.WriteString("⚡ *Cara Memproses:*\n")
+	sb.WriteString("• Balas: `acc <kode>` untuk menyetujui\n")
+	sb.WriteString("• Balas: `tolak <kode> [alasan]` untuk menolak\n")
+	sb.WriteString(fmt.Sprintf("\n_Contoh: `acc %s`_", leaves[0].Code))
+
+	return sb.String()
 }

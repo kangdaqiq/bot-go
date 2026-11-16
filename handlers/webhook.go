@@ -172,6 +172,24 @@ func handleTeacherMessage(replyTo, body string, teacher *services.Guru, deviceID
 		schoolName := services.GetSchoolName(deviceID)
 		responseMessage = services.GenerateTeacherHelpMessage(teacher.Nama, schoolName)
 
+	case cmd.Command == "approve_leave":
+		services.ClearSession(phoneNumber)
+		responseMessage = services.ApproveStudentLeaveByTeacher(cmd.Code, teacher, deviceID)
+
+	case cmd.Command == "approve_leave_help":
+		responseMessage = "⚠️ *Format Kurang Lengkap*\n\nSilakan sertakan kode izin yang ingin disetujui.\nContoh: `acc IZIN-ABC123`\n\nKetik `izin pending` untuk melihat daftar pengajuan."
+
+	case cmd.Command == "reject_leave":
+		services.ClearSession(phoneNumber)
+		responseMessage = services.RejectStudentLeaveByTeacher(cmd.Code, cmd.Reason, teacher, deviceID)
+
+	case cmd.Command == "reject_leave_help":
+		responseMessage = "⚠️ *Format Kurang Lengkap*\n\nSilakan sertakan kode izin dan alasan (opsional).\nContoh: `tolak IZIN-ABC123 Alasan tidak jelas`\n\nKetik `izin pending` untuk melihat daftar pengajuan."
+
+	case cmd.Command == "list_pending_leaves":
+		services.ClearSession(phoneNumber)
+		responseMessage = services.ListPendingLeavesForTeacher(teacher, deviceID)
+
 	case cmd.Command == "search_student":
 		students, _ := services.SearchStudentsByName(cmd.SearchTerm, deviceID)
 		responseMessage = services.GenerateStudentSearchResults(students, cmd.SearchTerm)

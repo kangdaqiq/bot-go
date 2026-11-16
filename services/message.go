@@ -80,14 +80,52 @@ type ParsedCommand struct {
 	SearchTerm string
 	Period     string
 	Option     int
+	Code       string
+	Reason     string
 }
 
 func ParseTeacherCommand(msg string) ParsedCommand {
-	text := strings.ToLower(strings.TrimSpace(msg))
+	trimmed := strings.TrimSpace(msg)
+	text := strings.ToLower(trimmed)
 
 	if text == "help" || text == "menu" || text == "bantuan" {
 		return ParsedCommand{Command: "teacher_help"}
 	}
+
+	// Persetujuan Izin (ACC / Setujui)
+	if strings.HasPrefix(text, "acc ") || strings.HasPrefix(text, "setujui ") {
+		prefixLen := 4
+		if strings.HasPrefix(text, "setujui ") {
+			prefixLen = 8
+		}
+		code := strings.TrimSpace(trimmed[prefixLen:])
+		code = strings.Trim(code, " \t:#`*")
+		return ParsedCommand{Command: "approve_leave", Code: strings.ToUpper(code)}
+	}
+	if text == "acc" || text == "setujui" {
+		return ParsedCommand{Command: "approve_leave_help"}
+	}
+
+	// Penolakan Izin (TOLAK)
+	if strings.HasPrefix(text, "tolak ") {
+		origRest := strings.TrimSpace(trimmed[6:])
+		parts := strings.SplitN(origRest, " ", 2)
+		code := strings.Trim(parts[0], " \t:#`*")
+		reason := ""
+		if len(parts) > 1 {
+			reason = strings.TrimSpace(parts[1])
+		}
+		return ParsedCommand{Command: "reject_leave", Code: strings.ToUpper(code), Reason: reason}
+	}
+	if text == "tolak" {
+		return ParsedCommand{Command: "reject_leave_help"}
+	}
+
+	// Cek Izin Pending
+	if text == "izin pending" || text == "list izin" || text == "cek izin" || text == "daftar izin" || text == "pengajuan izin" {
+		return ParsedCommand{Command: "list_pending_leaves"}
+	}
+
 	if strings.HasPrefix(text, "masuk ") {
 		return ParsedCommand{Command: "quick_checkin", SearchTerm: strings.TrimPrefix(text, "masuk ")}
 	}
@@ -193,7 +231,12 @@ Selamat datang di *Bot Absensi %s* 🎓
 7️⃣ *Rekap Siswa (Bulan Ini)*
    Ketik: `+"`"+`rekap [nama siswa]`+"`"+`
    
-8️⃣ *Menu Bantuan*
+8️⃣ *Persetujuan Izin Siswa (Wali Kelas)*
+   • Setujui: `+"`"+`acc [kode izin]`+"`"+`
+   • Tolak: `+"`"+`tolak [kode izin] [alasan]`+"`"+`
+   • Daftar pending: `+"`"+`izin pending`+"`"+`
+   
+9️⃣ *Menu Bantuan*
    Ketik: `+"`"+`help`+"`"+` atau `+"`"+`menu`+"`"+`
 
 💡 _Cukup ketik perintah di atas untuk menggunakan bot ini._
@@ -812,4 +855,55 @@ func GenerateRegisterSessionAlert(step string) string {
 	default:
 		return "⚠️ *Input Tidak Dikenali*\n\nKetik `Daftar Siswa` atau `Daftar Ortu` untuk memulai pendaftaran."
 	}
+}
+
+// ─── Leave Approval Notification Templates ───────────────────────────────────
+
+func GenerateParentLeaveApprovedNotification(namaSiswa, jenis, tglMulai, tglSelesai, teacherName string) string {
+	dateRange := FormatDateRangeIndo(tglMulai, tglSelesai)
+	return fmt.Sprintf(`✅ *PENGAJUAN %s DISETUJUI*
+
+Yth. Orang Tua / Siswa dari *%s*,
+
+Permohonan *%s* telah *DISETUJUI* oleh Wali Kelas (*%s*).
+
+👤 Nama Siswa : *%s*
+📋 Keterangan : *%s*
+📅 Tanggal    : %s
+✍️ Disetujui  : %s
+
+Status absensi siswa telah otomatis diperbarui pada sistem sekolah.
+
+_Terima kasih atas kerja sama Anda._ 🙏`,
+		strings.ToUpper(jenis),
+		namaSiswa,
+		strings.Title(jenis),
+		teacherName,
+		namaSiswa,
+		strings.Title(jenis),
+		dateRange,
+		teacherName,
+	)
+}
+
+func GenerateParentLeaveRejectedNotification(namaSiswa, jenis, tglMulai, tglSelesai, teacherName, reason string) string {
+	dateRange := FormatDateRangeIndo(tglMulai, tglSelesai)
+	return fmt.Sprintf(`⚠️ *PEMBERITAHUAN PENGAJUAN %s*
+
+Yth. Orang Tua / Siswa dari *%s*,
+
+Mohon maaf, permohonan *%s* untuk tanggal %s *BELUM DAPAT DISETUJUI*.
+
+📌 *Alasan:* %s
+
+Silakan hubungi pihak sekolah atau Wali Kelas (*%s*) untuk informasi lebih lanjut.
+
+_Terima kasih._ 🙏`,
+		strings.ToUpper(jenis),
+		namaSiswa,
+		strings.Title(jenis),
+		dateRange,
+		reason,
+		teacherName,
+	)
 }

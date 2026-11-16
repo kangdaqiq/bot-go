@@ -18,3 +18,7 @@ dist/
 
 # Environment file
 .env
+
+# Editor / Workspace
+*.code-workspace
+.vscode/
