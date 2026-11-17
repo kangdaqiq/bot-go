@@ -825,9 +825,23 @@ func UpdateLastSeen(phone string) {
 
 // ─── Student Leave Approval & Management ─────────────────────────────────────
 
+func parseDateFlexible(dateStr string) (time.Time, error) {
+	trimmed := strings.TrimSpace(dateStr)
+	if len(trimmed) >= 10 {
+		dateOnly := trimmed[:10]
+		if t, err := time.Parse("2006-01-02", dateOnly); err == nil {
+			return t, nil
+		}
+	}
+	if t, err := time.Parse(time.RFC3339, trimmed); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+	}
+	return time.Time{}, fmt.Errorf("cannot parse date: %s", dateStr)
+}
+
 func FormatDateRangeIndo(start, end string) string {
-	tStart, errStart := time.Parse("2006-01-02", start)
-	tEnd, errEnd := time.Parse("2006-01-02", end)
+	tStart, errStart := parseDateFlexible(start)
+	tEnd, errEnd := parseDateFlexible(end)
 	if errStart != nil || errEnd != nil {
 		if start == end || end == "" {
 			return start
@@ -840,6 +854,52 @@ func FormatDateRangeIndo(start, end string) string {
 		return fStart
 	}
 	return fmt.Sprintf("%s s/d %s", fStart, fEnd)
+}
+
+func syncLeaveAttendance(leave *StudentLeave, teacherName string) error {
+	startDate, errStart := parseDateFlexible(leave.TanggalMulai)
+	endDate, errEnd := parseDateFlexible(leave.TanggalSelesai)
+	if errStart != nil || errEnd != nil {
+		fmt.Printf("❌ Error parsing leave dates: start=%s (err: %v), end=%s (err: %v)\n", leave.TanggalMulai, errStart, leave.TanggalSelesai, errEnd)
+		return fmt.Errorf("format tanggal izin tidak valid: %s s/d %s", leave.TanggalMulai, leave.TanggalSelesai)
+	}
+
+	statusCode := "I"
+	if strings.ToLower(leave.Jenis) == "sakit" {
+		statusCode = "S"
+	}
+	keteranganAtt := fmt.Sprintf("[Pengajuan %s Disetujui %s] %s", strings.Title(leave.Jenis), teacherName, leave.Keterangan)
+
+	now := time.Now()
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		curDate := d.Format("2006-01-02")
+		var existingAtt Attendance
+		errFind := config.DB.Table("attendance").Where("student_id = ? AND tanggal = ?", leave.StudentID, curDate).First(&existingAtt).Error
+		if errFind == nil && existingAtt.ID > 0 {
+			errUpd := config.DB.Table("attendance").Where("id = ?", existingAtt.ID).Updates(map[string]interface{}{
+				"status":        statusCode,
+				"keterangan":    keteranganAtt,
+				"is_auto_alpha": 0,
+				"updated_at":    now,
+			}).Error
+			if errUpd != nil {
+				fmt.Printf("❌ Failed to update attendance for student %d on %s: %v\n", leave.StudentID, curDate, errUpd)
+			} else {
+				fmt.Printf("✅ Attendance updated: student %d on %s status -> %s\n", leave.StudentID, curDate, statusCode)
+			}
+		} else {
+			errIns := config.DB.Exec(
+				"INSERT INTO attendance (student_id, tanggal, status, keterangan, total_seconds, is_auto_alpha, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0, NOW(), NOW())",
+				leave.StudentID, curDate, statusCode, keteranganAtt,
+			).Error
+			if errIns != nil {
+				fmt.Printf("❌ Failed to insert attendance for student %d on %s: %v\n", leave.StudentID, curDate, errIns)
+			} else {
+				fmt.Printf("✅ Attendance inserted: student %d on %s status -> %s\n", leave.StudentID, curDate, statusCode)
+			}
+		}
+	}
+	return nil
 }
 
 func getUniquePhones(phones ...string) []string {
@@ -901,7 +961,10 @@ func ApproveStudentLeaveByTeacher(code string, teacher *Guru, schoolID string) s
 	// Cek Status Pengajuan
 	if leave.Status != "pending" {
 		if leave.Status == "approved" {
-			return fmt.Sprintf("ℹ️ *Pengajuan Sudah Disetujui*\n\nPengajuan izin kode *%s* an. *%s* (%s) sudah berstatus *Disetujui* sebelumnya.", leave.Code, leave.NamaSiswa, leave.NamaKelas)
+			// Sinkronkan ulang ke tabel attendance jika sebelumnya belum tersinkron
+			_ = syncLeaveAttendance(leave, teacher.Nama)
+			dateRange := FormatDateRangeIndo(leave.TanggalMulai, leave.TanggalSelesai)
+			return fmt.Sprintf("✅ *Absensi Berhasil Disinkronkan!*\n\nPengajuan izin kode *%s* an. *%s* (%s) sudah berstatus disetujui sebelumnya, dan data absensi tanggal *%s* kini telah dipastikan tersinkron sebagai *%s*.", leave.Code, leave.NamaSiswa, leave.NamaKelas, dateRange, strings.Title(leave.Jenis))
 		}
 		if leave.Status == "rejected" {
 			return fmt.Sprintf("ℹ️ *Pengajuan Sudah Ditolak*\n\nPengajuan izin kode *%s* an. *%s* (%s) sudah berstatus *Ditolak* sebelumnya.", leave.Code, leave.NamaSiswa, leave.NamaKelas)
@@ -933,34 +996,8 @@ func ApproveStudentLeaveByTeacher(code string, teacher *Guru, schoolID string) s
 	}
 
 	// Sinkronisasi ke tabel attendance
-	startDate, errStart := time.Parse("2006-01-02", leave.TanggalMulai)
-	endDate, errEnd := time.Parse("2006-01-02", leave.TanggalSelesai)
-
-	statusCode := "I"
-	if strings.ToLower(leave.Jenis) == "sakit" {
-		statusCode = "S"
-	}
-	keteranganAtt := fmt.Sprintf("[Pengajuan %s Disetujui %s] %s", strings.Title(leave.Jenis), teacher.Nama, leave.Keterangan)
-
-	if errStart == nil && errEnd == nil {
-		for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
-			curDate := d.Format("2006-01-02")
-			var existingAtt Attendance
-			errFind := config.DB.Table("attendance").Where("student_id = ? AND tanggal = ?", leave.StudentID, curDate).First(&existingAtt).Error
-			if errFind == nil {
-				config.DB.Table("attendance").Where("id = ?", existingAtt.ID).Updates(map[string]interface{}{
-					"status":        statusCode,
-					"keterangan":    keteranganAtt,
-					"is_auto_alpha": 0,
-					"updated_at":    now,
-				})
-			} else {
-				config.DB.Exec(
-					"INSERT INTO attendance (student_id, tanggal, status, keterangan, is_auto_alpha, created_at, updated_at) VALUES (?, ?, ?, ?, 0, NOW(), NOW())",
-					leave.StudentID, curDate, statusCode, keteranganAtt,
-				)
-			}
-		}
+	if errSync := syncLeaveAttendance(leave, teacher.Nama); errSync != nil {
+		fmt.Printf("⚠️ Warning: syncLeaveAttendance error: %v\n", errSync)
 	}
 
 	// Kirim notifikasi WhatsApp ke Orang Tua / Siswa secara background

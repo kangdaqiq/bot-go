@@ -52,6 +52,21 @@ func TestFormatDateRangeIndo(t *testing.T) {
 	if diff != "17/11/2026 s/d 19/11/2026" {
 		t.Errorf("Expected '17/11/2026 s/d 19/11/2026', got %q", diff)
 	}
+
+	rfc3339 := FormatDateRangeIndo("2026-11-17T00:00:00+07:00", "2026-11-17T00:00:00+07:00")
+	if rfc3339 != "17/11/2026" {
+		t.Errorf("Expected '17/11/2026', got %q", rfc3339)
+	}
+
+	rfc3339Diff := FormatDateRangeIndo("2026-11-17T00:00:00+07:00", "2026-11-18T00:00:00+07:00")
+	if rfc3339Diff != "17/11/2026 s/d 18/11/2026" {
+		t.Errorf("Expected '17/11/2026 s/d 18/11/2026', got %q", rfc3339Diff)
+	}
+
+	datetime := FormatDateRangeIndo("2026-11-17 00:00:00", "2026-11-17 00:00:00")
+	if datetime != "17/11/2026" {
+		t.Errorf("Expected '17/11/2026', got %q", datetime)
+	}
 }
 
 func TestGetUniquePhones(t *testing.T) {
